@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent.lightning_adapter import export_lightning_bundle
+from agent.lightning_adapter import detect_lightning_runtime, export_lightning_bundle
 from agent.trace_schema import ExperimentTrace
 from datasets.catalog import get_dataset_spec
 from datasets.loader import load_train_validation_tasks
@@ -109,9 +109,10 @@ def run_dataset_offline_experiment(
         policy_version=policy_version,
     )
     spec = get_dataset_spec(dataset_key)
+    runtime = detect_lightning_runtime(settings)
     experiment_summary = ExperimentSummary(
         experiment_id=make_id("exp"),
-        created_at=utc_now().date().isoformat(),
+        created_at=utc_now().isoformat(),
         dataset_key=dataset_key,
         dataset_hf_id=spec.hf_dataset,
         task_family=spec.task_family,
@@ -124,14 +125,7 @@ def run_dataset_offline_experiment(
         policy_version=policy_version,
         artifact_dir=str(artifact_dir),
         benchmark_summary=summarize_benchmark(traces),
-        lightning_runtime=export_lightning_bundle(
-            train_tasks=dataset_pair.train,
-            validation_tasks=dataset_pair.validation,
-            traces=traces,
-            report_markdown=report,
-            output_dir=artifact_dir,
-            settings=settings,
-        ).runtime,
+        lightning_runtime=runtime,
     )
     write_experiment_summary(experiment_summary, artifact_dir)
     return experiment_summary, traces, report

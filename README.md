@@ -123,6 +123,9 @@ On Windows, PRIORI-X exports the Agent Lightning bundle for use in Linux or WSL2
 
 ```bash
 python -m eval.benchmark_runner
+python -m eval.experiment_cli status
+python -m eval.experiment_cli run-dataset-rollout medmcqa --train-limit 8 --validation-limit 4
+python -m eval.experiment_cli list-experiments
 ```
 
 Generated artifacts are written to `artifacts/evals`, `artifacts/traces`, and `artifacts/reports`.
@@ -130,17 +133,25 @@ Generated artifacts are written to `artifacts/evals`, `artifacts/traces`, and `a
 To build a benchmark-driven rollout with an Agent Lightning sandbox bundle, use the offline rollout entry points in `src/agent/offline_rollout.py`. The rollout writes:
 
 - `benchmark_report.md`
+- `benchmark_summary.json`
 - `benchmark_traces.json`
 - `lightning_train_tasks.jsonl`
 - `lightning_validation_tasks.jsonl`
 - `lightning_transitions.jsonl`
 - `lightning_bundle_manifest.json`
+- `experiment_summary.json`
 
 ## API Surface
 
 - `GET /api/health` for environment and readiness metadata
 - `POST /api/analyze` for a structured research report from note text
 - `POST /api/benchmark/sample` for a sample offline benchmark sweep
+- `GET /api/research/status` for dataset and Microsoft Agent Lightning runtime metadata
+- `GET /api/research/datasets` for the benchmark catalog
+- `POST /api/research/benchmark/dataset` for an on-demand dataset benchmark summary
+- `POST /api/research/rollout/dataset` for an artifact-producing offline rollout
+- `GET /api/research/experiments` for recorded experiment summaries
+- `POST /api/research/experiments/compare` for before/after comparison
 
 ## Research Console
 
@@ -151,6 +162,8 @@ The Streamlit workbench includes:
 - next-best-test table with stewardship fields
 - safety and provenance view
 - calibration panel
+- research lab controls for dataset rollouts
+- experiment registry and comparison view
 - JSON audit trail
 
 ## OpenAI Model Configuration
