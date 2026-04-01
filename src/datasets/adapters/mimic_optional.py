@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import os
 
-from datasets.task_builders.common import BenchmarkTask
 from datasets.transforms.normalize import as_text
+from priorix_tasks.common import BenchmarkTask
 
 
 def normalize_mimic_like_row(row: dict[str, object], split: str) -> BenchmarkTask:
@@ -18,4 +18,3 @@ def normalize_mimic_like_row(row: dict[str, object], split: str) -> BenchmarkTas
         gold_triage=as_text(row.get("triage") or row.get("acuity")),
         metadata={"credential_gated": True},
     )
-

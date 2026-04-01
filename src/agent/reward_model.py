@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from agent.trace_schema import RewardBreakdown
-from datasets.task_builders.common import BenchmarkTask
 from llm.structured_output import ResearchReport
+from priorix_tasks.common import BenchmarkTask
 
 
 class CompositeRewardModel:
@@ -69,4 +69,3 @@ class CompositeRewardModel:
             veto_reasons=veto_reasons,
             failure_categories=failure_categories,
         )
-

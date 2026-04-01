@@ -12,6 +12,7 @@ class DiseaseProfile(BaseModel):
     category: str
     prior: float
     dangerous: bool
+    urgency_weight: float
     description: str
 
     def to_hypothesis(self) -> DiagnosisHypothesis:
@@ -35,6 +36,7 @@ DISEASE_PROFILES: dict[str, DiseaseProfile] = {
         category="vascular",
         prior=0.18,
         dangerous=True,
+        urgency_weight=0.95,
         description="Acute thromboembolic disease with moderate-to-high short-term harm if missed.",
     ),
     "pneumonia": DiseaseProfile(
@@ -43,6 +45,7 @@ DISEASE_PROFILES: dict[str, DiseaseProfile] = {
         category="infectious",
         prior=0.24,
         dangerous=True,
+        urgency_weight=0.55,
         description="Infectious parenchymal lung disease with urgency tied to oxygenation and sepsis context.",
     ),
     "heart_failure": DiseaseProfile(
@@ -51,6 +54,7 @@ DISEASE_PROFILES: dict[str, DiseaseProfile] = {
         category="cardiovascular",
         prior=0.22,
         dangerous=True,
+        urgency_weight=0.65,
         description="Cardiogenic congestion syndrome with meaningful resource and escalation implications.",
     ),
     "acs": DiseaseProfile(
@@ -59,6 +63,7 @@ DISEASE_PROFILES: dict[str, DiseaseProfile] = {
         category="cardiovascular",
         prior=0.16,
         dangerous=True,
+        urgency_weight=0.9,
         description="Ischemic chest pain syndrome requiring prompt triage and serial reassessment.",
     ),
 }
@@ -66,4 +71,3 @@ DISEASE_PROFILES: dict[str, DiseaseProfile] = {
 
 def default_hypotheses() -> list[DiagnosisHypothesis]:
     return [profile.to_hypothesis() for profile in DISEASE_PROFILES.values()]
-

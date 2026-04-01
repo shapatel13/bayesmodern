@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datasets.task_builders.common import BenchmarkTask
 from datasets.transforms.normalize import as_text
+from priorix_tasks.common import BenchmarkTask
 
 
 def normalize_pubmedqa_row(row: dict[str, object], split: str) -> BenchmarkTask:
@@ -17,4 +17,3 @@ def normalize_pubmedqa_row(row: dict[str, object], split: str) -> BenchmarkTask:
         choices=["yes", "no", "maybe"],
         gold_answer=as_text(row.get("final_decision") or row.get("answer")),
     )
-

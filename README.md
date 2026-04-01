@@ -78,7 +78,7 @@ python -m venv .venv
 . .venv/Scripts/activate
 pip install -e .[dev]
 copy .env.example .env
-pytest
+python -m pytest
 uvicorn apps.api.main:app --reload
 streamlit run apps/research_console/app.py
 ```
@@ -116,6 +116,23 @@ python -m eval.benchmark_runner
 
 Generated artifacts are written to `artifacts/evals`, `artifacts/traces`, and `artifacts/reports`.
 
+## API Surface
+
+- `GET /api/health` for environment and readiness metadata
+- `POST /api/analyze` for a structured research report from note text
+- `POST /api/benchmark/sample` for a sample offline benchmark sweep
+
+## Research Console
+
+The Streamlit workbench includes:
+
+- case intake
+- diagnostic cockpit
+- next-best-test table with stewardship fields
+- safety and provenance view
+- calibration panel
+- JSON audit trail
+
 ## Known Limitations
 
 - The shipped evidence catalogs are intentionally small starter registries and should be expanded with institution-approved sources before serious research use.
@@ -130,4 +147,3 @@ Generated artifacts are written to `artifacts/evals`, `artifacts/traces`, and `a
 - secret scanning in pre-commit
 - deterministic seeds for benchmark runs
 - explicit provenance tags for medical claims where possible
-

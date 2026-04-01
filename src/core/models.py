@@ -110,6 +110,9 @@ class TestRecommendation(BaseModel):
     rationale: str
     lr_plus: float
     lr_minus: float
+    direct_cost: float = 0.0
+    downstream_cost: float = 0.0
+    risk_penalty: float = 0.0
     provenance_badges: list[str] = Field(default_factory=list)
 
 

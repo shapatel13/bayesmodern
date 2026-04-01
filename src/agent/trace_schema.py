@@ -46,6 +46,11 @@ class RewardBreakdown(BaseModel):
 
 class ExperimentTrace(BaseModel):
     task_id: str
+    source_dataset: str
+    task_type: str
+    gold_diagnosis: str | None = None
+    acceptable_tests: list[str] = Field(default_factory=list)
+    gold_triage: str | None = None
     prompt_version: str
     policy_version: str
     model_route: str
@@ -61,4 +66,3 @@ class LightningTransition(BaseModel):
     reward: float
     done: bool
     info: dict[str, Any] = Field(default_factory=dict)
-

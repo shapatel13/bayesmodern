@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from apps.api.routers.analysis import router as analysis_router
 from apps.api.routers.health import router as health_router
 from security.secrets import validate_live_llm_config
 from utils.config import get_settings
@@ -31,6 +32,7 @@ app.add_middleware(
 )
 
 app.include_router(health_router, prefix="/api")
+app.include_router(analysis_router, prefix="/api")
 
 
 @app.get("/", tags=["meta"])
@@ -42,4 +44,3 @@ def read_root() -> dict[str, object]:
         "live_llm_provider_ready": secret_status.provider_ready,
         "disclaimer": "Research only. Not for autonomous clinical use.",
     }
-

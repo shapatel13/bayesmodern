@@ -29,7 +29,9 @@ class PRIORIXOrchestrator:
         posterior_map = {entry.slug: entry.posterior for entry in differential.ranked}
         recommendations = self.next_test_engine.rank(posterior_map, default_test_catalog(), context)[:5]
         dangerous_mass = sum(
-            entry.posterior for entry in differential.ranked if DISEASE_PROFILES.get(entry.slug, None) and DISEASE_PROFILES[entry.slug].dangerous
+            entry.posterior * DISEASE_PROFILES[entry.slug].urgency_weight
+            for entry in differential.ranked
+            if DISEASE_PROFILES.get(entry.slug, None) and DISEASE_PROFILES[entry.slug].dangerous
         )
         triage = assess_triage(dangerous_mass, context.hemodynamic_instability, context.critical_values_present)
         thresholds = calculate_thresholds(
@@ -54,4 +56,3 @@ class PRIORIXOrchestrator:
         report.contradictions = validate_report(report)
         report.provenance_warnings = find_missing_citations(report)
         return report
-

@@ -31,12 +31,15 @@ class NextBestTestEngine:
                         stewardship_score=0.0,
                         disposition="already_answered",
                         discriminates_between=test.target_diagnoses,
-                    rationale="This test is already documented as completed.",
-                    lr_plus=1.0,
-                    lr_minus=1.0,
-                    provenance_badges=[f"source:{test.source_type.replace('_', '-')}", *test.provenance_refs],
+                        rationale="This test is already documented as completed.",
+                        lr_plus=1.0,
+                        lr_minus=1.0,
+                        direct_cost=test.direct_cost,
+                        downstream_cost=test.downstream_cost,
+                        risk_penalty=1.0,
+                        provenance_badges=[f"source:{test.source_type.replace('_', '-')}", *test.provenance_refs],
+                    )
                 )
-            )
                 continue
 
             movements: list[float] = []
@@ -85,6 +88,9 @@ class NextBestTestEngine:
                     ),
                     lr_plus=average_lr_plus,
                     lr_minus=average_lr_minus,
+                    direct_cost=test.direct_cost,
+                    downstream_cost=test.downstream_cost,
+                    risk_penalty=risk_penalty.total_penalty,
                     provenance_badges=[f"source:{test.source_type.replace('_', '-')}", *test.provenance_refs],
                 )
             )

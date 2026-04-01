@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datasets.task_builders.common import BenchmarkTask
 from datasets.transforms.normalize import as_text
+from priorix_tasks.common import BenchmarkTask
 
 
 def normalize_medqa_row(row: dict[str, object], split: str) -> BenchmarkTask:
@@ -23,4 +23,3 @@ def normalize_medqa_row(row: dict[str, object], split: str) -> BenchmarkTask:
         gold_answer=answer,
         metadata={"meta": {key: row[key] for key in row.keys() if key not in {'question', 'answer', 'options'}}},
     )
-

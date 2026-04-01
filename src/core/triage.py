@@ -17,21 +17,21 @@ def assess_triage(
     if dangerous_posterior_mass >= 0.55:
         reasons.append("High aggregate posterior for dangerous diagnoses")
 
-    if hemodynamic_instability or critical_values_present or dangerous_posterior_mass >= 0.75:
+    if hemodynamic_instability or critical_values_present or dangerous_posterior_mass >= 0.85:
         return TriageAssessment(
             urgency="emergent",
             reasons=reasons or ["Immediate stabilization concern"],
             admit_threshold_crossed=True,
             icu_threshold_crossed=True,
         )
-    if dangerous_posterior_mass >= 0.4:
+    if dangerous_posterior_mass >= 0.55:
         return TriageAssessment(
             urgency="urgent",
             reasons=reasons or ["Meaningful short-term deterioration risk"],
             admit_threshold_crossed=True,
             icu_threshold_crossed=False,
         )
-    if dangerous_posterior_mass >= 0.2:
+    if dangerous_posterior_mass >= 0.3:
         return TriageAssessment(
             urgency="expedited",
             reasons=reasons or ["Moderate concern requiring prompt workup"],
@@ -44,4 +44,3 @@ def assess_triage(
         admit_threshold_crossed=False,
         icu_threshold_crossed=False,
     )
-

@@ -1,0 +1,9 @@
+{
+  "cases": 2,
+  "hard_veto_count": 0,
+  "mean_reward": 0.95,
+  "top_diagnoses": [
+    "pe",
+    "heart_failure"
+  ]
+}

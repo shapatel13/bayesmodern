@@ -44,7 +44,7 @@ package-dir = { "" = "src" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["core*", "evidence*", "llm*", "agent*", "datasets*", "eval*", "ui*", "security*", "utils*"]
+include = ["core*", "evidence*", "llm*", "agent*", "datasets*", "eval*", "ui*", "security*", "utils*", "priorix_tasks*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
