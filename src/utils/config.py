@@ -1,0 +1,45 @@
+from __future__ import annotations
+
+from functools import lru_cache
+from typing import Literal
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+SafetyMode = Literal["conservative", "standard", "research"]
+
+
+class Settings(BaseSettings):
+    app_name: str = Field(default="PRIORI-X", alias="PRIORI_APP_NAME")
+    environment: str = Field(default="development", alias="PRIORI_ENV")
+    log_level: str = Field(default="INFO", alias="PRIORI_LOG_LEVEL")
+    safety_mode: SafetyMode = Field(default="conservative", alias="PRIORI_SAFETY_MODE")
+    allow_live_llm: bool = Field(default=False, alias="PRIORI_ALLOW_LIVE_LLM")
+    default_model_provider: str = Field(default="offline", alias="PRIORI_DEFAULT_MODEL_PROVIDER")
+    default_reasoner: str = Field(default="hybrid-bayesian", alias="PRIORI_DEFAULT_REASONER")
+    redact_traces: bool = Field(default=True, alias="PRIORI_REDACT_TRACES")
+    trace_retention_days: int = Field(default=30, alias="PRIORI_TRACE_RETENTION_DAYS")
+    seed: int = Field(default=17, alias="PRIORI_SEED")
+    experiment_namespace: str = Field(default="local-dev", alias="PRIORI_EXPERIMENT_NAMESPACE")
+
+    openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
+    google_api_key: str | None = Field(default=None, alias="GOOGLE_API_KEY")
+    hf_token: str | None = Field(default=None, alias="HF_TOKEN")
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    @property
+    def live_llm_provider_ready(self) -> bool:
+        return any([self.openai_api_key, self.google_api_key])
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return Settings()
+
