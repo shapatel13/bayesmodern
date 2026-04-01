@@ -1,22 +1,39 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
 
+from agent.lightning_adapter import detect_lightning_runtime
+from agent.offline_rollout import run_dataset_offline_experiment
 from agent.orchestrator import PRIORIXOrchestrator
+from datasets.catalog import get_dataset_spec, list_dataset_specs
+from eval.experiment_registry import compare_experiment_summaries, list_experiment_summaries
 from security.secrets import validate_live_llm_config
 from ui.charts.probabilities import calibration_figure, differential_figure
 from ui.components.report_cards import headline_cards
 from ui.viewmodels.cockpit import differential_rows, next_test_rows, provenance_rows
+from ui.viewmodels.research_lab import (
+    benchmark_summary_cards,
+    comparison_rows,
+    dataset_catalog_rows,
+    experiment_rows,
+)
 from utils.config import get_settings
+
+
+EXPERIMENTS_ROOT = Path("artifacts/evals/experiments")
 
 
 def main() -> None:
     settings = get_settings()
     secret_status = validate_live_llm_config(settings)
+    lightning_runtime = detect_lightning_runtime(settings)
     orchestrator = PRIORIXOrchestrator(settings)
+    dataset_specs = list_dataset_specs()
+    experiment_summaries = list_experiment_summaries(EXPERIMENTS_ROOT)
 
     st.set_page_config(page_title="PRIORI-X Research Console", page_icon="PX", layout="wide")
     st.markdown(
@@ -87,11 +104,16 @@ def main() -> None:
                     f"- OpenAI parser: `{settings.openai_parser_model}`",
                     f"- OpenAI reasoner: `{settings.openai_reasoning_model}`",
                     f"- Provider ready: `{secret_status.provider_ready}`",
+                    f"- Microsoft Agent Lightning: `{lightning_runtime.mode}`",
                     f"- Trace redaction: `{settings.redact_traces}`",
                     f"- Namespace: `{settings.experiment_namespace}`",
                 ]
             )
         )
+        if lightning_runtime.mode == "export_only":
+            st.info(lightning_runtime.reason)
+        else:
+            st.success(lightning_runtime.reason)
         if st.button("Load PE Demo"):
             st.session_state["case_text"] = sample_case
         st.caption("Every output remains inspectable, versionable, and explicitly research-only.")
@@ -148,6 +170,100 @@ def main() -> None:
             )
         with tab5:
             st.code(json.dumps(report.model_dump(), indent=2), language="json")
+
+    st.divider()
+    st.subheader("Research Lab")
+    research_metrics = st.columns(4)
+    research_metrics[0].metric("Datasets", len(dataset_specs))
+    research_metrics[1].metric("Experiments", len(experiment_summaries))
+    research_metrics[2].metric("Lightning Mode", lightning_runtime.mode.replace("_", " ").title())
+    research_metrics[3].metric("Native Training Ready", "Yes" if lightning_runtime.native_training_ready else "No")
+
+    st.caption(
+        "Offline benchmark runs export Microsoft Agent Lightning-compatible traces and transitions. "
+        "No live patient traffic is used for self-improvement."
+    )
+
+    control_col, catalog_col = st.columns([1, 1.3])
+    with control_col:
+        selected_dataset = st.selectbox("Benchmark Dataset", [spec.key for spec in dataset_specs], key="lab_dataset")
+        selected_spec = get_dataset_spec(selected_dataset)
+        subset_value = st.text_input(
+            "Subset / Config",
+            value=selected_spec.default_subset or "",
+            help="Leave blank to use the dataset's default configuration.",
+        )
+        train_limit = st.slider("Train Cases", min_value=1, max_value=32, value=8)
+        validation_limit = st.slider("Validation Cases", min_value=0, max_value=16, value=4)
+        prompt_version = st.text_input("Prompt Version", value="v1-offline")
+        policy_version = st.text_input("Policy Version", value="v1-deterministic")
+        if st.button("Run Offline Dataset Rollout", type="primary", use_container_width=True):
+            with st.spinner("Running offline benchmark and exporting Lightning bundle..."):
+                try:
+                    experiment_summary, traces, report = run_dataset_offline_experiment(
+                        selected_dataset,
+                        EXPERIMENTS_ROOT,
+                        subset=subset_value or None,
+                        train_limit=train_limit,
+                        validation_limit=validation_limit,
+                        settings=settings,
+                        prompt_version=prompt_version,
+                        policy_version=policy_version,
+                    )
+                    st.session_state["lab_experiment_summary"] = experiment_summary.model_dump()
+                    st.session_state["lab_experiment_report"] = report
+                    st.session_state["lab_trace_count"] = len(traces)
+                    experiment_summaries = list_experiment_summaries(EXPERIMENTS_ROOT)
+                    st.success(f"Stored experiment `{experiment_summary.experiment_id}` in {experiment_summary.artifact_dir}")
+                except Exception as exc:
+                    st.session_state["lab_error"] = str(exc)
+
+        if "lab_error" in st.session_state:
+            st.error(st.session_state["lab_error"])
+
+    with catalog_col:
+        st.dataframe(pd.DataFrame(dataset_catalog_rows(dataset_specs)), use_container_width=True, hide_index=True)
+
+    if "lab_experiment_summary" in st.session_state:
+        from eval.experiment_registry import ExperimentSummary
+
+        lab_summary = ExperimentSummary.model_validate(st.session_state["lab_experiment_summary"])
+        st.markdown("#### Latest Offline Rollout")
+        summary_columns = st.columns(len(benchmark_summary_cards(lab_summary.benchmark_summary)))
+        for column, (label, value) in zip(summary_columns, benchmark_summary_cards(lab_summary.benchmark_summary), strict=True):
+            column.metric(label, value)
+        st.caption(f"Artifacts: `{lab_summary.artifact_dir}`")
+        st.markdown(st.session_state.get("lab_experiment_report", ""))
+        manifest_path = Path(lab_summary.artifact_dir) / "lightning_bundle_manifest.json"
+        if manifest_path.exists():
+            st.json(json.loads(manifest_path.read_text(encoding="utf-8")))
+
+    st.markdown("#### Experiment Registry")
+    if experiment_summaries:
+        st.dataframe(pd.DataFrame(experiment_rows(experiment_summaries)), use_container_width=True, hide_index=True)
+    else:
+        st.info("No offline experiments have been recorded yet.")
+
+    st.markdown("#### Experiment Compare")
+    if len(experiment_summaries) >= 2:
+        experiment_ids = [summary.experiment_id for summary in experiment_summaries]
+        compare_left, compare_right = st.columns(2)
+        baseline_id = compare_left.selectbox("Baseline Experiment", experiment_ids, index=min(1, len(experiment_ids) - 1))
+        candidate_id = compare_right.selectbox("Candidate Experiment", experiment_ids, index=0)
+        if baseline_id == candidate_id:
+            st.warning("Choose two different experiment IDs to compare.")
+        else:
+            baseline = next(summary for summary in experiment_summaries if summary.experiment_id == baseline_id)
+            candidate = next(summary for summary in experiment_summaries if summary.experiment_id == candidate_id)
+            comparison = compare_experiment_summaries(baseline, candidate)
+            st.dataframe(pd.DataFrame(comparison_rows(comparison)), use_container_width=True, hide_index=True)
+            promoted = ", ".join(comparison.promoted_dimensions) or "None"
+            regressed = ", ".join(comparison.regressed_dimensions) or "None"
+            summary_col_1, summary_col_2 = st.columns(2)
+            summary_col_1.info(f"Promoted: {promoted}")
+            summary_col_2.warning(f"Regressed: {regressed}")
+    else:
+        st.caption("Two or more experiments are needed before side-by-side comparison becomes available.")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
