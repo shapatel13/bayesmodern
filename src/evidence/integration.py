@@ -5,7 +5,7 @@ from functools import lru_cache
 
 from core.models import CandidateTest, ClinicalDecisionContext, HypothesisEvidence, LikelihoodRatioRange
 from evidence.query import RegistryResolution, resolve_registry_entry
-from evidence.registry_loader import AgeGroup, EvidenceStatus, LREntry, load_seed_registry
+from evidence.registry_loader import AgeGroup, EvidenceStatus, LREntry, load_default_registry_bundle
 
 
 @dataclass(frozen=True)
@@ -69,7 +69,7 @@ TEST_REGISTRY_BINDINGS: dict[str, list[TestRegistryBinding]] = {
 
 @lru_cache(maxsize=1)
 def _cached_seed_registry() -> tuple[LREntry, ...]:
-    return tuple(load_seed_registry())
+    return tuple(load_default_registry_bundle())
 
 
 def _active_registry(entries: list[LREntry] | None = None) -> tuple[LREntry, ...]:

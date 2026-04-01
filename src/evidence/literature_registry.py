@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from evidence.provenance import SourceRecord
-from evidence.registry_loader import load_seed_registry
+from evidence.registry_loader import load_default_registry_bundle
 
 
 LITERATURE_REGISTRY: dict[str, SourceRecord] = {
@@ -68,7 +68,7 @@ LITERATURE_REGISTRY: dict[str, SourceRecord] = {
 
 @lru_cache(maxsize=1)
 def _seed_registry_source_ids() -> frozenset[str]:
-    return frozenset(entry.id for entry in load_seed_registry())
+    return frozenset(entry.id for entry in load_default_registry_bundle())
 
 
 def is_known_provenance_ref(reference: str) -> bool:

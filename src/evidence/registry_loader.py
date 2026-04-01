@@ -97,6 +97,8 @@ NUMERIC_EVIDENCE_FIELDS = (
 
 DEFAULT_JSONL_PATH = Path(__file__).resolve().parent / "data" / "lr_registry.seed.jsonl"
 DEFAULT_CSV_PATH = Path(__file__).resolve().parent / "data" / "lr_registry.seed.csv"
+DEFAULT_CURATED_JSONL_PATH = Path(__file__).resolve().parent / "data" / "lr_registry.curated.jsonl"
+DEFAULT_CURATED_CSV_PATH = Path(__file__).resolve().parent / "data" / "lr_registry.curated.csv"
 
 
 class LRPopulation(BaseModel):
@@ -292,3 +294,27 @@ def load_seed_registry(prefer: str = "jsonl") -> list[LREntry]:
     if prefer == "csv":
         return load_registry_csv(DEFAULT_CSV_PATH)
     raise ValueError("prefer must be either 'jsonl' or 'csv'.")
+
+
+def load_curated_registry(prefer: str = "jsonl") -> list[LREntry]:
+    if prefer == "jsonl":
+        path = DEFAULT_CURATED_JSONL_PATH
+        return load_registry_jsonl(path) if path.exists() else []
+    if prefer == "csv":
+        path = DEFAULT_CURATED_CSV_PATH
+        return load_registry_csv(path) if path.exists() else []
+    raise ValueError("prefer must be either 'jsonl' or 'csv'.")
+
+
+def load_default_registry_bundle(prefer: str = "jsonl") -> list[LREntry]:
+    entries = [*load_seed_registry(prefer=prefer), *load_curated_registry(prefer=prefer)]
+    seen_ids: set[str] = set()
+    duplicates: list[str] = []
+    for entry in entries:
+        if entry.id in seen_ids:
+            duplicates.append(entry.id)
+        seen_ids.add(entry.id)
+    if duplicates:
+        duplicate_list = ", ".join(sorted(set(duplicates)))
+        raise ValueError(f"Duplicate LR registry ids in default bundle: {duplicate_list}")
+    return entries

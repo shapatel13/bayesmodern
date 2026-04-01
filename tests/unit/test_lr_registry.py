@@ -5,7 +5,18 @@ from datetime import date
 import pytest
 
 from evidence.query import query_registry, resolve_registry_entry
-from evidence.registry_loader import DEFAULT_CSV_PATH, DEFAULT_JSONL_PATH, EvidenceStatus, LREntry, SourceType, load_registry
+from evidence.registry_loader import (
+    DEFAULT_CSV_PATH,
+    DEFAULT_CURATED_CSV_PATH,
+    DEFAULT_CURATED_JSONL_PATH,
+    DEFAULT_JSONL_PATH,
+    EvidenceStatus,
+    LREntry,
+    SourceType,
+    load_curated_registry,
+    load_default_registry_bundle,
+    load_registry,
+)
 from evidence.registry_validator import RegistryValidationError, validate_registry_entries
 
 
@@ -52,6 +63,22 @@ def test_registry_loader_supports_jsonl_and_csv_seed_files() -> None:
     assert len(jsonl_entries) == len(csv_entries) >= 10
     assert jsonl_entries[0].id == csv_entries[0].id
     assert all(entry.evidence_status == EvidenceStatus.SEED_ONLY for entry in jsonl_entries)
+
+
+def test_curated_registry_supports_jsonl_and_csv_and_contains_sourced_rows() -> None:
+    jsonl_entries = load_registry(DEFAULT_CURATED_JSONL_PATH)
+    csv_entries = load_registry(DEFAULT_CURATED_CSV_PATH)
+    assert len(jsonl_entries) == len(csv_entries) >= 5
+    assert {entry.id for entry in jsonl_entries} == {entry.id for entry in csv_entries}
+    assert all(entry.evidence_status == EvidenceStatus.SOURCED for entry in jsonl_entries)
+
+
+def test_default_registry_bundle_merges_seed_and_curated_rows() -> None:
+    bundle = load_default_registry_bundle()
+    curated = load_curated_registry()
+    seed = load_registry(DEFAULT_JSONL_PATH)
+    assert len(bundle) == len(seed) + len(curated)
+    assert any(entry.evidence_status == EvidenceStatus.SOURCED for entry in bundle)
 
 
 def test_query_registry_returns_best_sourced_row_first() -> None:
@@ -142,6 +169,27 @@ def test_resolver_warns_when_only_seed_rows_exist() -> None:
     assert resolution.confidence_label == "seed_registry_only"
 
 
+def test_default_bundle_prefers_curated_sourced_row_over_seed_only() -> None:
+    entries = load_default_registry_bundle()
+    resolution = resolve_registry_entry(
+        entries,
+        condition="Pulmonary embolism",
+        test_or_finding="D-dimer",
+        setting="ED",
+        condition_group="thromboembolic",
+    )
+    assert resolution.selected is not None
+    assert resolution.selected.id == "pe_d_dimer_age_adjusted_meta_2021"
+    assert resolution.selection_reason == "exact_condition_broader_setting_sourced"
+
+
+def test_query_registry_allows_alias_style_test_names() -> None:
+    entries = load_default_registry_bundle()
+    ranked = query_registry(entries, condition="Appendicitis", test_or_finding="ultrasound", age_group="pediatric")
+    assert ranked
+    assert ranked[0].id == "appendicitis_us_peds_nonradiologist_meta_2025"
+
+
 def test_estimated_rows_are_labeled_lower_confidence() -> None:
     entry = _entry(
         entry_id="estimated_row",
@@ -164,4 +212,3 @@ def test_duplicate_ids_fail_validation() -> None:
     entries = [_entry(entry_id="dup_row"), _entry(entry_id="dup_row")]
     with pytest.raises(RegistryValidationError):
         validate_registry_entries(entries)
-

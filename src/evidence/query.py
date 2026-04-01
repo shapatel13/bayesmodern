@@ -37,7 +37,9 @@ def _condition_matches(entry: LREntry, condition: str | None) -> bool:
 def _test_matches(entry: LREntry, test_or_finding: str | None) -> bool:
     if test_or_finding is None:
         return True
-    return _normalize(entry.test_or_finding) == _normalize(test_or_finding)
+    requested = _normalize(test_or_finding)
+    candidate = _normalize(entry.test_or_finding)
+    return requested == candidate or requested in candidate or candidate in requested
 
 
 def _setting_matches(entry: LREntry, setting: Setting | str | None) -> bool:
