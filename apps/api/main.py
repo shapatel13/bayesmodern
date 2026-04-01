@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.routers.analysis import router as analysis_router
 from apps.api.routers.health import router as health_router
+from apps.api.routers.research import router as research_router
 from security.secrets import validate_live_llm_config
 from utils.config import get_settings
 from utils.logging import configure_logging
@@ -33,6 +34,7 @@ app.add_middleware(
 
 app.include_router(health_router, prefix="/api")
 app.include_router(analysis_router, prefix="/api")
+app.include_router(research_router, prefix="/api")
 
 
 @app.get("/", tags=["meta"])

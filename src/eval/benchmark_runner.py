@@ -2,16 +2,37 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pydantic import BaseModel, Field
+
 from agent.orchestrator import PRIORIXOrchestrator
 from agent.reward_model import CompositeRewardModel
 from agent.trace_schema import ExperimentTrace, TraceStep
 from datasets.loader import load_benchmark_tasks
 from eval.calibration_eval import calibration_summary
 from eval.error_analysis import summarize_failure_categories
+from eval.metrics import average, safe_log_loss, top_k_recall
 from eval.next_test_eval import next_test_hit_rate
 from eval.safety_eval import unsafe_recommendation_rate
 from priorix_tasks.common import BenchmarkTask
 from utils.jsonx import dumps_pretty
+
+
+class BenchmarkMetricsSummary(BaseModel):
+    cases: int
+    mean_reward: float
+    hard_veto_count: int
+    top1_differential_recall: float
+    top3_differential_recall: float
+    next_best_test_hit_rate: float
+    unsafe_recommendation_rate: float
+    unsupported_claim_rate: float
+    contradiction_rate: float
+    urgency_accuracy: float
+    brier_score: float
+    expected_calibration_error: float
+    log_loss: float
+    failure_categories: dict[str, int] = Field(default_factory=dict)
+    top_diagnoses: list[str] = Field(default_factory=list)
 
 
 def run_benchmark(
@@ -51,6 +72,10 @@ def run_benchmark(
     if output_dir is not None:
         output_dir.mkdir(parents=True, exist_ok=True)
         (output_dir / "benchmark_traces.json").write_text(dumps_pretty([trace.model_dump() for trace in traces]), encoding="utf-8")
+        (output_dir / "benchmark_summary.json").write_text(
+            dumps_pretty(summarize_benchmark(traces).model_dump()),
+            encoding="utf-8",
+        )
     return traces
 
 
@@ -98,16 +123,65 @@ def default_demo_tasks() -> list[BenchmarkTask]:
     ]
 
 
-def build_markdown_report(traces: list[ExperimentTrace]) -> str:
+def summarize_benchmark(traces: list[ExperimentTrace]) -> BenchmarkMetricsSummary:
+    ranked_lists = [
+        [entry.slug for entry in trace.report.differential.ranked]
+        for trace in traces
+        if trace.gold_diagnosis and trace.report.differential.ranked
+    ]
+    gold_diagnoses = [trace.gold_diagnosis for trace in traces if trace.gold_diagnosis and trace.report.differential.ranked]
+    top_probabilities = [trace.report.differential.ranked[0].posterior for trace in traces if trace.report.differential.ranked and trace.gold_diagnosis]
+    top_outcomes = [
+        1 if trace.report.differential.ranked[0].slug == trace.gold_diagnosis else 0
+        for trace in traces
+        if trace.report.differential.ranked and trace.gold_diagnosis
+    ]
+    rewards = [trace.reward.total_reward for trace in traces if trace.reward]
+    supported_urgency = [trace for trace in traces if trace.gold_triage]
+    top_diagnoses = [
+        trace.report.differential.ranked[0].slug
+        for trace in traces
+        if trace.report.differential.ranked
+    ]
     calibration = calibration_summary(traces)
+
+    return BenchmarkMetricsSummary(
+        cases=len(traces),
+        mean_reward=average(rewards),
+        hard_veto_count=sum(1 for trace in traces if trace.reward and trace.reward.hard_veto),
+        top1_differential_recall=top_k_recall(ranked_lists, gold_diagnoses, k=1) if gold_diagnoses else 0.0,
+        top3_differential_recall=top_k_recall(ranked_lists, gold_diagnoses, k=3) if gold_diagnoses else 0.0,
+        next_best_test_hit_rate=next_test_hit_rate(traces),
+        unsafe_recommendation_rate=unsafe_recommendation_rate(traces),
+        unsupported_claim_rate=sum(1 for trace in traces if trace.report.provenance_warnings) / len(traces) if traces else 0.0,
+        contradiction_rate=sum(1 for trace in traces if trace.report.contradictions) / len(traces) if traces else 0.0,
+        urgency_accuracy=(
+            sum(1 for trace in supported_urgency if trace.report.triage.urgency == trace.gold_triage) / len(supported_urgency)
+            if supported_urgency
+            else 0.0
+        ),
+        brier_score=calibration["brier_score"],
+        expected_calibration_error=calibration["expected_calibration_error"],
+        log_loss=safe_log_loss(top_probabilities, top_outcomes) if top_probabilities else 0.0,
+        failure_categories=summarize_failure_categories(traces),
+        top_diagnoses=top_diagnoses,
+    )
+
+
+def build_markdown_report(traces: list[ExperimentTrace]) -> str:
+    summary = summarize_benchmark(traces)
     lines = [
         "# PRIORI-X Benchmark Report",
         "",
-        f"- Cases: {len(traces)}",
-        f"- Unsafe recommendation rate: {unsafe_recommendation_rate(traces):.2%}",
-        f"- Next-best-test hit rate: {next_test_hit_rate(traces):.2%}",
-        f"- Brier score: {calibration['brier_score']:.3f}",
-        f"- ECE: {calibration['expected_calibration_error']:.3f}",
+        f"- Cases: {summary.cases}",
+        f"- Mean reward: {summary.mean_reward:.3f}",
+        f"- Unsafe recommendation rate: {summary.unsafe_recommendation_rate:.2%}",
+        f"- Next-best-test hit rate: {summary.next_best_test_hit_rate:.2%}",
+        f"- Top-1 differential recall: {summary.top1_differential_recall:.2%}",
+        f"- Top-3 differential recall: {summary.top3_differential_recall:.2%}",
+        f"- Brier score: {summary.brier_score:.3f}",
+        f"- ECE: {summary.expected_calibration_error:.3f}",
+        f"- Log loss: {summary.log_loss:.3f}",
         "",
         "## Case Snapshots",
     ]
@@ -120,10 +194,10 @@ def build_markdown_report(traces: list[ExperimentTrace]) -> str:
     lines.extend(
         [
             "",
-        "## Failure Categories",
+            "## Failure Categories",
         ]
     )
-    for key, value in summarize_failure_categories(traces).items():
+    for key, value in summary.failure_categories.items():
         lines.append(f"- {key}: {value}")
     return "\n".join(lines)
 
