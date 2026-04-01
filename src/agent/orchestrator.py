@@ -25,9 +25,17 @@ class PRIORIXOrchestrator:
         return self.analyze_context(context)
 
     def analyze_context(self, context) -> ResearchReport:
-        differential = self.differential_engine.rank(context, default_hypotheses(), seed=self.settings.seed)
+        differential = self.differential_engine.rank(
+            context,
+            default_hypotheses(context=context),
+            seed=self.settings.seed,
+        )
         posterior_map = {entry.slug: entry.posterior for entry in differential.ranked}
-        recommendations = self.next_test_engine.rank(posterior_map, default_test_catalog(), context)[:5]
+        recommendations = self.next_test_engine.rank(
+            posterior_map,
+            default_test_catalog(context=context),
+            context,
+        )[:5]
         dangerous_mass = sum(
             entry.posterior * DISEASE_PROFILES[entry.slug].urgency_weight
             for entry in differential.ranked

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from core.models import CandidateTest, LikelihoodRatioRange
+from core.models import CandidateTest, ClinicalDecisionContext, LikelihoodRatioRange
+from evidence.integration import enrich_candidate_test
+from evidence.registry_loader import LREntry
 
 
 TEST_CATALOG: dict[str, CandidateTest] = {
@@ -55,6 +57,12 @@ TEST_CATALOG: dict[str, CandidateTest] = {
 }
 
 
-def default_test_catalog() -> list[CandidateTest]:
-    return list(TEST_CATALOG.values())
-
+def default_test_catalog(
+    *,
+    context: ClinicalDecisionContext | None = None,
+    registry_entries: list[LREntry] | None = None,
+) -> list[CandidateTest]:
+    return [
+        enrich_candidate_test(candidate, context=context, registry_entries=registry_entries)
+        for candidate in TEST_CATALOG.values()
+    ]

@@ -20,6 +20,7 @@ class NextBestTestEngine:
     ) -> list[TestRecommendation]:
         recommendations: list[TestRecommendation] = []
         for test in candidates:
+            note_prefix = f"{test.evidence_note} " if test.evidence_note else ""
             if test.already_done or test.slug in context.completed_tests:
                 recommendations.append(
                     TestRecommendation(
@@ -31,7 +32,7 @@ class NextBestTestEngine:
                         stewardship_score=0.0,
                         disposition="already_answered",
                         discriminates_between=test.target_diagnoses,
-                        rationale="This test is already documented as completed.",
+                        rationale=f"{note_prefix}This test is already documented as completed.".strip(),
                         lr_plus=1.0,
                         lr_minus=1.0,
                         direct_cost=test.direct_cost,
@@ -83,9 +84,10 @@ class NextBestTestEngine:
                     disposition=disposition,
                     discriminates_between=test.target_diagnoses,
                     rationale=(
-                        f"Expected information gain {info_gain:.3f}; stewardship score {stewardship_score:.3f}. "
+                        f"{note_prefix}Expected information gain {info_gain:.3f}; "
+                        f"stewardship score {stewardship_score:.3f}. "
                         f"Risk penalties: {', '.join(risk_penalty.reasons) if risk_penalty.reasons else 'low.'}"
-                    ),
+                    ).strip(),
                     lr_plus=average_lr_plus,
                     lr_minus=average_lr_minus,
                     direct_cost=test.direct_cost,

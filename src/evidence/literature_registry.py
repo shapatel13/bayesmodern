@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from functools import lru_cache
+
 from evidence.provenance import SourceRecord
+from evidence.registry_loader import load_seed_registry
 
 
 LITERATURE_REGISTRY: dict[str, SourceRecord] = {
@@ -61,3 +64,16 @@ LITERATURE_REGISTRY: dict[str, SourceRecord] = {
         notes="Used for conservative research-mode penalties in CKD contexts.",
     ),
 }
+
+
+@lru_cache(maxsize=1)
+def _seed_registry_source_ids() -> frozenset[str]:
+    return frozenset(entry.id for entry in load_seed_registry())
+
+
+def is_known_provenance_ref(reference: str) -> bool:
+    if reference in LITERATURE_REGISTRY:
+        return True
+    if reference.startswith("registry:"):
+        return reference.split(":", maxsplit=1)[1] in _seed_registry_source_ids()
+    return False

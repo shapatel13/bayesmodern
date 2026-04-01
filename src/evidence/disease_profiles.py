@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from core.models import ClinicalDecisionContext
 from core.models import DiagnosisHypothesis
+from evidence.integration import enrich_hypothesis_evidence
 from evidence.lr_catalog import LR_CATALOG
+from evidence.registry_loader import LREntry
 
 
 class DiseaseProfile(BaseModel):
@@ -15,8 +18,18 @@ class DiseaseProfile(BaseModel):
     urgency_weight: float
     description: str
 
-    def to_hypothesis(self) -> DiagnosisHypothesis:
-        evidence_items = LR_CATALOG.get(self.slug, [])
+    def to_hypothesis(
+        self,
+        *,
+        context: ClinicalDecisionContext | None = None,
+        registry_entries: list[LREntry] | None = None,
+    ) -> DiagnosisHypothesis:
+        evidence_items = enrich_hypothesis_evidence(
+            self.slug,
+            LR_CATALOG.get(self.slug, []),
+            context=context,
+            registry_entries=registry_entries,
+        )
         supporting = [item for item in evidence_items if item.lr.positive_lr >= 1.0]
         contradicting = [item for item in evidence_items if item.lr.positive_lr < 1.0]
         return DiagnosisHypothesis(
@@ -69,5 +82,12 @@ DISEASE_PROFILES: dict[str, DiseaseProfile] = {
 }
 
 
-def default_hypotheses() -> list[DiagnosisHypothesis]:
-    return [profile.to_hypothesis() for profile in DISEASE_PROFILES.values()]
+def default_hypotheses(
+    *,
+    context: ClinicalDecisionContext | None = None,
+    registry_entries: list[LREntry] | None = None,
+) -> list[DiagnosisHypothesis]:
+    return [
+        profile.to_hypothesis(context=context, registry_entries=registry_entries)
+        for profile in DISEASE_PROFILES.values()
+    ]

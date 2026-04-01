@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-SourceType = Literal["hard_coded", "llm_inferred", "user_supplied"]
+SourceType = Literal["hard_coded", "llm_inferred", "user_supplied", "evidence_registry"]
 UrgencyLevel = Literal["routine", "expedited", "urgent", "emergent"]
 CalibrationState = Literal["confident", "moderately_uncertain", "fragile"]
 
@@ -94,6 +94,7 @@ class CandidateTest(BaseModel):
     urgency_modifier: float = Field(ge=0.5, le=2.0, default=1.0)
     bedside: bool = False
     already_done: bool = False
+    evidence_note: str | None = None
     provenance_refs: list[str] = Field(default_factory=list)
     source_type: SourceType = "hard_coded"
 
