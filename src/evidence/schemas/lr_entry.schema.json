@@ -1,0 +1,226 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bayesmodern.local/schemas/lr_entry.schema.json",
+  "title": "Likelihood Ratio Evidence Entry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "condition",
+    "test_or_finding",
+    "evidence_status",
+    "source_type",
+    "setting",
+    "population",
+    "applicability_flags",
+    "status_updated_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_\\-\\.]+$"
+    },
+    "condition": {
+      "type": "string",
+      "minLength": 1
+    },
+    "condition_group": {
+      "type": "string"
+    },
+    "test_or_finding": {
+      "type": "string",
+      "minLength": 1
+    },
+    "test_category": {
+      "type": "string",
+      "enum": [
+        "history",
+        "physical_exam",
+        "lab",
+        "imaging",
+        "ultrasound",
+        "clinical_score",
+        "ecg",
+        "microbiology",
+        "procedure",
+        "composite_rule"
+      ]
+    },
+    "comparator_or_threshold": {
+      "type": ["string", "null"]
+    },
+    "target_outcome": {
+      "type": ["string", "null"]
+    },
+    "lr_positive": {
+      "type": ["number", "null"],
+      "exclusiveMinimum": 0
+    },
+    "lr_negative": {
+      "type": ["number", "null"],
+      "exclusiveMinimum": 0
+    },
+    "sensitivity": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "specificity": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "ci_95_lower_lr_positive": {
+      "type": ["number", "null"],
+      "exclusiveMinimum": 0
+    },
+    "ci_95_upper_lr_positive": {
+      "type": ["number", "null"],
+      "exclusiveMinimum": 0
+    },
+    "ci_95_lower_lr_negative": {
+      "type": ["number", "null"],
+      "exclusiveMinimum": 0
+    },
+    "ci_95_upper_lr_negative": {
+      "type": ["number", "null"],
+      "exclusiveMinimum": 0
+    },
+    "pretest_anchor_min": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "pretest_anchor_max": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "setting": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": ["ED", "ICU", "outpatient", "inpatient", "urgent_care", "mixed", "unknown"]
+      }
+    },
+    "population": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["age_group"],
+      "properties": {
+        "age_group": {
+          "type": "string",
+          "enum": ["adult", "pediatric", "geriatric", "mixed", "unknown"]
+        },
+        "pregnancy": {
+          "type": ["boolean", "null"]
+        },
+        "immunocompromised": {
+          "type": ["boolean", "null"]
+        },
+        "renal_impairment_relevant": {
+          "type": ["boolean", "null"]
+        },
+        "icu_population": {
+          "type": ["boolean", "null"]
+        },
+        "notes": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "applicability_flags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "ICU",
+          "ED",
+          "outpatient",
+          "inpatient",
+          "pregnant",
+          "pediatrics",
+          "elderly",
+          "immunocompromised",
+          "renal_risk",
+          "radiation_risk",
+          "invasive_test",
+          "low_cost",
+          "high_cost",
+          "bedside",
+          "send_out"
+        ]
+      }
+    },
+    "harms_or_constraints": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "direct_cost_usd": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "downstream_cascade_cost_usd": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "turnaround_time_hours": {
+      "type": ["number", "null"],
+      "minimum": 0
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "meta_analysis",
+        "systematic_review",
+        "primary_study",
+        "guideline",
+        "expert_estimate",
+        "local_override"
+      ]
+    },
+    "source_citation": {
+      "type": ["string", "null"]
+    },
+    "source_url": {
+      "type": ["string", "null"],
+      "format": "uri"
+    },
+    "pmid_or_doi": {
+      "type": ["string", "null"]
+    },
+    "publication_year": {
+      "type": ["integer", "null"],
+      "minimum": 1900,
+      "maximum": 2100
+    },
+    "evidence_status": {
+      "type": "string",
+      "enum": ["sourced", "estimated", "seed_only", "deprecated"]
+    },
+    "notes_for_model": {
+      "type": ["string", "null"]
+    },
+    "preference_weight_hint": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "status_updated_at": {
+      "type": "string",
+      "format": "date"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "evidence_status": { "const": "sourced" } },
+        "required": ["evidence_status"]
+      },
+      "then": {
+        "required": ["source_citation"]
+      }
+    }
+  ]
+}

@@ -43,6 +43,9 @@ datasets = [
 [tool.setuptools]
 package-dir = { "" = "src" }
 
+[tool.setuptools.package-data]
+evidence = ["data/*.jsonl", "data/*.csv", "schemas/*.json"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["core*", "evidence*", "llm*", "agent*", "datasets*", "eval*", "ui*", "security*", "utils*", "priorix_tasks*"]
