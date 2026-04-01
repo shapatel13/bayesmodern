@@ -5,7 +5,7 @@ from priorix_tasks.common import BenchmarkTask
 
 
 def normalize_pubmedqa_row(row: dict[str, object], split: str) -> BenchmarkTask:
-    contexts = row.get("contexts")
+    contexts = row.get("contexts") or row.get("context")
     context_text = " ".join(as_text(item) for item in contexts) if isinstance(contexts, list) else as_text(contexts)
     prompt = f"{as_text(row.get('question'))}\n\nContext:\n{context_text}".strip()
     return BenchmarkTask(

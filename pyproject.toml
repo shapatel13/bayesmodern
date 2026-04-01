@@ -39,6 +39,10 @@ dev = [
 datasets = [
   "datasets>=3.0.0",
 ]
+lightning = [
+  "agentlightning",
+  "datasets>=3.0.0",
+]
 
 [tool.setuptools]
 package-dir = { "" = "src" }

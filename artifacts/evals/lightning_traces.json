@@ -1,0 +1,691 @@
+[
+  {
+    "acceptable_tests": [
+      "d_dimer",
+      "cta_pe"
+    ],
+    "gold_diagnosis": "pe",
+    "gold_triage": "urgent",
+    "model_route": "offline",
+    "policy_version": "v1-deterministic",
+    "prompt_version": "v1-offline",
+    "report": {
+      "context": {
+        "age_years": null,
+        "case_id": "sample-pe-1",
+        "comorbidities": [],
+        "completed_tests": [],
+        "critical_values_present": false,
+        "findings": [
+          {
+            "key": "pleuritic_chest_pain",
+            "label": "Pleuritic chest pain",
+            "note": null,
+            "present": true,
+            "source_type": "user_supplied",
+            "units": null,
+            "value": null
+          },
+          {
+            "key": "tachycardia",
+            "label": "Tachycardia",
+            "note": null,
+            "present": true,
+            "source_type": "user_supplied",
+            "units": null,
+            "value": null
+          },
+          {
+            "key": "hypoxemia",
+            "label": "Hypoxemia",
+            "note": null,
+            "present": true,
+            "source_type": "user_supplied",
+            "units": null,
+            "value": null
+          },
+          {
+            "key": "fever",
+            "label": "Fever",
+            "note": null,
+            "present": true,
+            "source_type": "user_supplied",
+            "units": null,
+            "value": null
+          }
+        ],
+        "hemodynamic_instability": false,
+        "medications": [],
+        "pregnant": false,
+        "renal_impairment": false,
+        "safety_mode": "conservative",
+        "specialty": "general_internal_medicine",
+        "symptoms_free_text": "Pleuritic chest pain with tachycardia and hypoxemia after immobility. No fever."
+      },
+      "contradictions": [],
+      "differential": {
+        "model_note": "Hybrid deterministic Bayesian differential with Monte Carlo uncertainty and explaining-away.",
+        "posterior_mass_top3": 0.8727773835300322,
+        "ranked": [
+          {
+            "calibration_state": "fragile",
+            "evidence_against": [
+              {
+                "applied_lr": 0.7,
+                "direction": "against",
+                "finding_key": "fever",
+                "label": "Fever",
+                "provenance_refs": [
+                  "rule:wells_pe"
+                ],
+                "rationale": "Fever modestly lowers PE likelihood relative to infectious alternatives.",
+                "source_type": "hard_coded"
+              }
+            ],
+            "evidence_for": [
+              {
+                "applied_lr": 1.8,
+                "direction": "for",
+                "finding_key": "pleuritic_chest_pain",
+                "label": "Pleuritic chest pain",
+                "provenance_refs": [
+                  "rule:wells_pe"
+                ],
+                "rationale": "Pleuritic pain increases suspicion for thromboembolic pleural irritation.",
+                "source_type": "hard_coded"
+              },
+              {
+                "applied_lr": 1.7,
+                "direction": "for",
+                "finding_key": "tachycardia",
+                "label": "Tachycardia",
+                "provenance_refs": [
+                  "rule:wells_pe"
+                ],
+                "rationale": "Tachycardia is supportive but non-specific in PE suspicion.",
+                "source_type": "hard_coded"
+              },
+              {
+                "applied_lr": 2.0,
+                "direction": "for",
+                "finding_key": "hypoxemia",
+                "label": "Hypoxemia",
+                "provenance_refs": [
+                  "rule:wells_pe"
+                ],
+                "rationale": "Gas exchange impairment supports clinically meaningful PE.",
+                "source_type": "hard_coded"
+              }
+            ],
+            "explaining_away": [],
+            "interval_high": 0.5858290136546797,
+            "interval_low": 0.3537386876960586,
+            "name": "Pulmonary Embolism",
+            "posterior": 0.38535710699193615,
+            "prior": 0.18,
+            "provenance_badges": [
+              "source:hard-coded",
+              "rule:wells_pe"
+            ],
+            "slug": "pe",
+            "symptom_coverage": 0.75
+          },
+          {
+            "calibration_state": "fragile",
+            "evidence_against": [],
+            "evidence_for": [
+              {
+                "applied_lr": 2.1,
+                "direction": "for",
+                "finding_key": "fever",
+                "label": "Fever",
+                "provenance_refs": [
+                  "study:cxr_pneumonia"
+                ],
+                "rationale": "Fever materially increases the likelihood of lower respiratory infection.",
+                "source_type": "hard_coded"
+              }
+            ],
+            "explaining_away": [],
+            "interval_high": 0.37767112071847636,
+            "interval_low": 0.22988885085976254,
+            "name": "Community-Acquired Pneumonia",
+            "posterior": 0.31248917889189043,
+            "prior": 0.24,
+            "provenance_badges": [
+              "source:hard-coded",
+              "study:cxr_pneumonia"
+            ],
+            "slug": "pneumonia",
+            "symptom_coverage": 0.25
+          },
+          {
+            "calibration_state": "fragile",
+            "evidence_against": [],
+            "evidence_for": [],
+            "explaining_away": [],
+            "interval_high": 0.16349415184898716,
+            "interval_low": 0.10269166194300529,
+            "name": "Acute Decompensated Heart Failure",
+            "posterior": 0.17493109764620565,
+            "prior": 0.22,
+            "provenance_badges": [],
+            "slug": "heart_failure",
+            "symptom_coverage": 0.0
+          },
+          {
+            "calibration_state": "fragile",
+            "evidence_against": [],
+            "evidence_for": [],
+            "explaining_away": [],
+            "interval_high": 0.11766699470581876,
+            "interval_low": 0.07377348038790418,
+            "name": "Acute Coronary Syndrome",
+            "posterior": 0.12722261646996774,
+            "prior": 0.16,
+            "provenance_badges": [],
+            "slug": "acs",
+            "symptom_coverage": 0.0
+          }
+        ]
+      },
+      "disclaimer": "Research only. PRIORI-X does not diagnose, treat, or autonomously manage patients.",
+      "model_route": {
+        "mode": "offline",
+        "parser_model": "offline-keyword-parser",
+        "reasoning_model": "deterministic-bayes-engine",
+        "verifier_model": "offline-contradiction-checker"
+      },
+      "next_best_tests": [
+        {
+          "direct_cost": 40.0,
+          "discriminates_between": [
+            "pe"
+          ],
+          "disposition": "worth_it_now",
+          "downstream_cost": 0.0,
+          "expected_information_gain": 0.2245062927861278,
+          "expected_posterior_movement": 0.2245062927861278,
+          "lr_minus": 0.09685230024213085,
+          "lr_plus": 1.635434412265758,
+          "name": "D-dimer",
+          "provenance_badges": [
+            "source:evidence-registry",
+            "study:d_dimer_pe",
+            "cost:starter_us_hospital",
+            "registry:pe_d_dimer_age_adjusted_meta_2021"
+          ],
+          "rationale": "Use as a rule-out test after structured pretest assessment; pooled specificity is modest and should not be framed as a stand-alone rule-in signal. Expected information gain 0.225; stewardship score 0.146. Risk penalties: low.",
+          "risk_penalty": 0.0,
+          "score": 0.14551333791693466,
+          "slug": "d_dimer",
+          "stewardship_score": 0.14551333791693466
+        },
+        {
+          "direct_cost": 90.0,
+          "discriminates_between": [
+            "heart_failure"
+          ],
+          "disposition": "worth_it_now",
+          "downstream_cost": 0.0,
+          "expected_information_gain": 0.1683964376646231,
+          "expected_posterior_movement": 0.1683964376646231,
+          "lr_minus": 0.3,
+          "lr_plus": 3.1,
+          "name": "BNP",
+          "provenance_badges": [
+            "source:hard-coded",
+            "study:bnp_hf",
+            "cost:starter_us_hospital",
+            "registry:hf_bnp_volume_overload"
+          ],
+          "rationale": "No sourced LR data available yet for this condition/test; using seed registry only. Avoid overselling as rule-in without context. Expected information gain 0.168; stewardship score 0.114. Risk penalties: low.",
+          "risk_penalty": 0.0,
+          "score": 0.11416707638279532,
+          "slug": "bnp",
+          "stewardship_score": 0.11416707638279532
+        },
+        {
+          "direct_cost": 850.0,
+          "discriminates_between": [
+            "pe"
+          ],
+          "disposition": "defer",
+          "downstream_cost": 300.0,
+          "expected_information_gain": 0.38738538296779224,
+          "expected_posterior_movement": 0.38738538296779224,
+          "lr_minus": 0.1,
+          "lr_plus": 8.0,
+          "name": "CT Pulmonary Angiography",
+          "provenance_badges": [
+            "source:hard-coded",
+            "study:cta_pe",
+            "cost:starter_us_hospital",
+            "risk:contrast_ckd",
+            "registry:pe_ctpa_adult_ed"
+          ],
+          "rationale": "No sourced LR data available yet for this condition/test; using seed registry only. Prefer after pretest stratification unless instability or high suspicion changes workflow. Expected information gain 0.387; stewardship score 0.088. Risk penalties: Radiation exposure",
+          "risk_penalty": 0.6,
+          "score": 0.08762288424271492,
+          "slug": "cta_pe",
+          "stewardship_score": 0.08762288424271492
+        },
+        {
+          "direct_cost": 120.0,
+          "discriminates_between": [
+            "pneumonia",
+            "heart_failure"
+          ],
+          "disposition": "defer",
+          "downstream_cost": 0.0,
+          "expected_information_gain": 0.1425144156325521,
+          "expected_posterior_movement": 0.21153559287629486,
+          "lr_minus": 0.55,
+          "lr_plus": 2.4,
+          "name": "Chest Radiograph",
+          "provenance_badges": [
+            "source:hard-coded",
+            "study:cxr_pneumonia",
+            "cost:starter_us_hospital",
+            "registry:cap_cxr"
+          ],
+          "rationale": "No sourced LR data available yet for this condition/test; using seed registry only. Explain that a negative CXR does not always exclude early pneumonia. Expected information gain 0.143; stewardship score 0.073. Risk penalties: low.",
+          "risk_penalty": 0.15,
+          "score": 0.07295959844669904,
+          "slug": "cxr",
+          "stewardship_score": 0.07295959844669904
+        }
+      ],
+      "provenance_warnings": [],
+      "threshold_decision": {
+        "action": "icu_consider",
+        "clinician_language": "Posterior exceeds ICU escalation threshold given current severity assumptions.",
+        "plain_language": "The current risk is high enough that critical-care level escalation should be considered."
+      },
+      "triage": {
+        "admit_threshold_crossed": true,
+        "icu_threshold_crossed": false,
+        "reasons": [
+          "High aggregate posterior for dangerous diagnoses"
+        ],
+        "urgency": "urgent"
+      }
+    },
+    "reward": {
+      "calibration_quality": 1.0,
+      "consistency": 1.0,
+      "diagnostic_correctness": 1.0,
+      "failure_categories": [],
+      "hard_veto": false,
+      "json_validity": 1.0,
+      "next_test_quality": 1.0,
+      "provenance": 1.0,
+      "safety": 1.0,
+      "stewardship": 1.0,
+      "topk_differential_quality": 1.0,
+      "total_reward": 1.0,
+      "urgency": 1.0,
+      "veto_reasons": []
+    },
+    "source_dataset": "synthetic",
+    "steps": [
+      {
+        "detail": "Keyword-based structured extraction",
+        "metadata": {},
+        "name": "extract"
+      },
+      {
+        "detail": "Deterministic Bayesian differential",
+        "metadata": {},
+        "name": "differential"
+      },
+      {
+        "detail": "Stewardship-aware next-best-test ranking",
+        "metadata": {},
+        "name": "next_test"
+      },
+      {
+        "detail": "Contradiction and citation checks",
+        "metadata": {},
+        "name": "validate"
+      }
+    ],
+    "task_id": "sample-pe-1",
+    "task_type": "diagnosis_open"
+  },
+  {
+    "acceptable_tests": [
+      "bnp",
+      "cxr"
+    ],
+    "gold_diagnosis": "heart_failure",
+    "gold_triage": "expedited",
+    "model_route": "offline",
+    "policy_version": "v1-deterministic",
+    "prompt_version": "v1-offline",
+    "report": {
+      "context": {
+        "age_years": null,
+        "case_id": "sample-hf-1",
+        "comorbidities": [],
+        "completed_tests": [],
+        "critical_values_present": false,
+        "findings": [
+          {
+            "key": "crackles",
+            "label": "Crackles",
+            "note": null,
+            "present": true,
+            "source_type": "user_supplied",
+            "units": null,
+            "value": null
+          },
+          {
+            "key": "orthopnea",
+            "label": "Orthopnea",
+            "note": null,
+            "present": true,
+            "source_type": "user_supplied",
+            "units": null,
+            "value": null
+          },
+          {
+            "key": "leg_edema",
+            "label": "Leg edema",
+            "note": null,
+            "present": true,
+            "source_type": "user_supplied",
+            "units": null,
+            "value": null
+          }
+        ],
+        "hemodynamic_instability": false,
+        "medications": [],
+        "pregnant": false,
+        "renal_impairment": false,
+        "safety_mode": "conservative",
+        "specialty": "general_internal_medicine",
+        "symptoms_free_text": "Orthopnea, crackles, leg edema, and progressive dyspnea over several days."
+      },
+      "contradictions": [],
+      "differential": {
+        "model_note": "Hybrid deterministic Bayesian differential with Monte Carlo uncertainty and explaining-away.",
+        "posterior_mass_top3": 0.8935625479362046,
+        "ranked": [
+          {
+            "calibration_state": "moderately_uncertain",
+            "evidence_against": [],
+            "evidence_for": [
+              {
+                "applied_lr": 2.7,
+                "direction": "for",
+                "finding_key": "orthopnea",
+                "label": "Orthopnea",
+                "provenance_refs": [
+                  "study:bnp_hf"
+                ],
+                "rationale": "Orthopnea favors cardiogenic pulmonary congestion.",
+                "source_type": "hard_coded"
+              },
+              {
+                "applied_lr": 2.0,
+                "direction": "for",
+                "finding_key": "crackles",
+                "label": "Diffuse crackles",
+                "provenance_refs": [
+                  "study:bnp_hf"
+                ],
+                "rationale": "Pulmonary edema physiology often presents with crackles.",
+                "source_type": "hard_coded"
+              },
+              {
+                "applied_lr": 1.8,
+                "direction": "for",
+                "finding_key": "leg_edema",
+                "label": "Leg edema",
+                "provenance_refs": [
+                  "study:bnp_hf"
+                ],
+                "rationale": "Peripheral edema adds support for systemic congestion.",
+                "source_type": "hard_coded"
+              }
+            ],
+            "explaining_away": [],
+            "interval_high": 0.7768527908526617,
+            "interval_low": 0.5929356952784675,
+            "name": "Acute Decompensated Heart Failure",
+            "posterior": 0.4874371391285039,
+            "prior": 0.22,
+            "provenance_badges": [
+              "source:hard-coded",
+              "study:bnp_hf"
+            ],
+            "slug": "heart_failure",
+            "symptom_coverage": 1.0
+          },
+          {
+            "calibration_state": "fragile",
+            "evidence_against": [],
+            "evidence_for": [
+              {
+                "applied_lr": 2.5,
+                "direction": "for",
+                "finding_key": "crackles",
+                "label": "Focal crackles",
+                "provenance_refs": [
+                  "study:cxr_pneumonia"
+                ],
+                "rationale": "Focal auscultatory findings support parenchymal involvement.",
+                "source_type": "hard_coded"
+              }
+            ],
+            "explaining_away": [
+              "heart_failure covers overlapping findings and suppresses this hypothesis slightly."
+            ],
+            "interval_high": 0.2680116627180417,
+            "interval_low": 0.1363435591340007,
+            "name": "Community-Acquired Pneumonia",
+            "posterior": 0.2863832752359308,
+            "prior": 0.24,
+            "provenance_badges": [
+              "source:hard-coded",
+              "study:cxr_pneumonia"
+            ],
+            "slug": "pneumonia",
+            "symptom_coverage": 0.3333333333333333
+          },
+          {
+            "calibration_state": "fragile",
+            "evidence_against": [],
+            "evidence_for": [],
+            "explaining_away": [],
+            "interval_high": 0.07599865675355624,
+            "interval_low": 0.04326422781096401,
+            "name": "Pulmonary Embolism",
+            "posterior": 0.11974213357176984,
+            "prior": 0.18,
+            "provenance_badges": [],
+            "slug": "pe",
+            "symptom_coverage": 0.0
+          },
+          {
+            "calibration_state": "fragile",
+            "evidence_against": [],
+            "evidence_for": [],
+            "explaining_away": [],
+            "interval_high": 0.06847124565538289,
+            "interval_low": 0.03847229664316001,
+            "name": "Acute Coronary Syndrome",
+            "posterior": 0.10643745206379543,
+            "prior": 0.16,
+            "provenance_badges": [],
+            "slug": "acs",
+            "symptom_coverage": 0.0
+          }
+        ]
+      },
+      "disclaimer": "Research only. PRIORI-X does not diagnose, treat, or autonomously manage patients.",
+      "model_route": {
+        "mode": "offline",
+        "parser_model": "offline-keyword-parser",
+        "reasoning_model": "deterministic-bayes-engine",
+        "verifier_model": "offline-contradiction-checker"
+      },
+      "next_best_tests": [
+        {
+          "direct_cost": 90.0,
+          "discriminates_between": [
+            "heart_failure"
+          ],
+          "disposition": "worth_it_now",
+          "downstream_cost": 0.0,
+          "expected_information_gain": 0.2623708714977717,
+          "expected_posterior_movement": 0.2623708714977717,
+          "lr_minus": 0.3,
+          "lr_plus": 3.1,
+          "name": "BNP",
+          "provenance_badges": [
+            "source:hard-coded",
+            "study:bnp_hf",
+            "cost:starter_us_hospital",
+            "registry:hf_bnp_volume_overload"
+          ],
+          "rationale": "No sourced LR data available yet for this condition/test; using seed registry only. Avoid overselling as rule-in without context. Expected information gain 0.262; stewardship score 0.178. Risk penalties: low.",
+          "risk_penalty": 0.0,
+          "score": 0.17787855694764185,
+          "slug": "bnp",
+          "stewardship_score": 0.17787855694764185
+        },
+        {
+          "direct_cost": 120.0,
+          "discriminates_between": [
+            "pneumonia",
+            "heart_failure"
+          ],
+          "disposition": "defer",
+          "downstream_cost": 0.0,
+          "expected_information_gain": 0.15988379572084516,
+          "expected_posterior_movement": 0.2039727950581048,
+          "lr_minus": 0.55,
+          "lr_plus": 2.4,
+          "name": "Chest Radiograph",
+          "provenance_badges": [
+            "source:hard-coded",
+            "study:cxr_pneumonia",
+            "cost:starter_us_hospital",
+            "registry:cap_cxr"
+          ],
+          "rationale": "No sourced LR data available yet for this condition/test; using seed registry only. Explain that a negative CXR does not always exclude early pneumonia. Expected information gain 0.160; stewardship score 0.082. Risk penalties: low.",
+          "risk_penalty": 0.15,
+          "score": 0.0818517725533337,
+          "slug": "cxr",
+          "stewardship_score": 0.0818517725533337
+        },
+        {
+          "direct_cost": 850.0,
+          "discriminates_between": [
+            "pe"
+          ],
+          "disposition": "defer",
+          "downstream_cost": 300.0,
+          "expected_information_gain": 0.2538543463074766,
+          "expected_posterior_movement": 0.2538543463074766,
+          "lr_minus": 0.1,
+          "lr_plus": 8.0,
+          "name": "CT Pulmonary Angiography",
+          "provenance_badges": [
+            "source:hard-coded",
+            "study:cta_pe",
+            "cost:starter_us_hospital",
+            "risk:contrast_ckd",
+            "registry:pe_ctpa_adult_ed"
+          ],
+          "rationale": "No sourced LR data available yet for this condition/test; using seed registry only. Prefer after pretest stratification unless instability or high suspicion changes workflow. Expected information gain 0.254; stewardship score 0.057. Risk penalties: Radiation exposure",
+          "risk_penalty": 0.6,
+          "score": 0.05741943547431019,
+          "slug": "cta_pe",
+          "stewardship_score": 0.05741943547431019
+        },
+        {
+          "direct_cost": 40.0,
+          "discriminates_between": [
+            "pe"
+          ],
+          "disposition": "defer",
+          "downstream_cost": 0.0,
+          "expected_information_gain": 0.08449000950320568,
+          "expected_posterior_movement": 0.08449000950320568,
+          "lr_minus": 0.09685230024213085,
+          "lr_plus": 1.635434412265758,
+          "name": "D-dimer",
+          "provenance_badges": [
+            "source:evidence-registry",
+            "study:d_dimer_pe",
+            "cost:starter_us_hospital",
+            "registry:pe_d_dimer_age_adjusted_meta_2021"
+          ],
+          "rationale": "Use as a rule-out test after structured pretest assessment; pooled specificity is modest and should not be framed as a stand-alone rule-in signal. Expected information gain 0.084; stewardship score 0.055. Risk penalties: low.",
+          "risk_penalty": 0.0,
+          "score": 0.05476204319652219,
+          "slug": "d_dimer",
+          "stewardship_score": 0.05476204319652219
+        }
+      ],
+      "provenance_warnings": [],
+      "threshold_decision": {
+        "action": "icu_consider",
+        "clinician_language": "Posterior exceeds ICU escalation threshold given current severity assumptions.",
+        "plain_language": "The current risk is high enough that critical-care level escalation should be considered."
+      },
+      "triage": {
+        "admit_threshold_crossed": true,
+        "icu_threshold_crossed": false,
+        "reasons": [
+          "High aggregate posterior for dangerous diagnoses"
+        ],
+        "urgency": "urgent"
+      }
+    },
+    "reward": {
+      "calibration_quality": 1.0,
+      "consistency": 1.0,
+      "diagnostic_correctness": 1.0,
+      "failure_categories": [],
+      "hard_veto": false,
+      "json_validity": 1.0,
+      "next_test_quality": 1.0,
+      "provenance": 1.0,
+      "safety": 1.0,
+      "stewardship": 1.0,
+      "topk_differential_quality": 1.0,
+      "total_reward": 0.9,
+      "urgency": 0.0,
+      "veto_reasons": []
+    },
+    "source_dataset": "synthetic",
+    "steps": [
+      {
+        "detail": "Keyword-based structured extraction",
+        "metadata": {},
+        "name": "extract"
+      },
+      {
+        "detail": "Deterministic Bayesian differential",
+        "metadata": {},
+        "name": "differential"
+      },
+      {
+        "detail": "Stewardship-aware next-best-test ranking",
+        "metadata": {},
+        "name": "next_test"
+      },
+      {
+        "detail": "Contradiction and citation checks",
+        "metadata": {},
+        "name": "validate"
+      }
+    ],
+    "task_id": "sample-hf-1",
+    "task_type": "diagnosis_open"
+  }
+]

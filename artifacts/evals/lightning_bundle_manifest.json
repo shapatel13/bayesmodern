@@ -1,0 +1,24 @@
+{
+  "adapter": "TraceToMessages",
+  "algorithm": "apo",
+  "notes": [
+    "Native Microsoft Agent Lightning training should run on Linux or WSL2; exporting sandbox bundle only.",
+    "The bundle is structured for Microsoft Agent Lightning prompt/policy optimization over benchmark tasks only.",
+    "No online learning from real patient traffic is permitted in PRIORI-X.",
+    "Use the exported task JSONL files and transitions inside Linux/WSL2 to launch native Agent Lightning training."
+  ],
+  "prompt_template_baseline": "You are PRIORI-X, a clinician-facing research workbench operating strictly in offline evaluation mode.\nAnalyze the following benchmark vignette conservatively, preserve uncertainty, and avoid treatment autopilot.\n\nCase:\n{task}",
+  "report_path": "artifacts\\evals\\lightning_report.md",
+  "runtime": {
+    "mode": "export_only",
+    "native_training_ready": false,
+    "package_available": true,
+    "package_version": "0.2.1",
+    "platform_supported": false,
+    "reason": "Native Microsoft Agent Lightning training should run on Linux or WSL2; exporting sandbox bundle only."
+  },
+  "traces_path": "artifacts\\evals\\lightning_traces.json",
+  "train_tasks_path": "artifacts\\evals\\lightning_train_tasks.jsonl",
+  "transitions_path": "artifacts\\evals\\lightning_transitions.jsonl",
+  "validation_tasks_path": "artifacts\\evals\\lightning_validation_tasks.jsonl"
+}

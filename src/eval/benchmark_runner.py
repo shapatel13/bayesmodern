@@ -5,6 +5,7 @@ from pathlib import Path
 from agent.orchestrator import PRIORIXOrchestrator
 from agent.reward_model import CompositeRewardModel
 from agent.trace_schema import ExperimentTrace, TraceStep
+from datasets.loader import load_benchmark_tasks
 from eval.calibration_eval import calibration_summary
 from eval.error_analysis import summarize_failure_categories
 from eval.next_test_eval import next_test_hit_rate
@@ -13,7 +14,13 @@ from priorix_tasks.common import BenchmarkTask
 from utils.jsonx import dumps_pretty
 
 
-def run_benchmark(tasks: list[BenchmarkTask], output_dir: Path | None = None) -> list[ExperimentTrace]:
+def run_benchmark(
+    tasks: list[BenchmarkTask],
+    output_dir: Path | None = None,
+    *,
+    prompt_version: str = "v1-offline",
+    policy_version: str = "v1-deterministic",
+) -> list[ExperimentTrace]:
     orchestrator = PRIORIXOrchestrator()
     reward_model = CompositeRewardModel()
     traces: list[ExperimentTrace] = []
@@ -28,8 +35,8 @@ def run_benchmark(tasks: list[BenchmarkTask], output_dir: Path | None = None) ->
                 gold_diagnosis=task.gold_diagnosis,
                 acceptable_tests=task.acceptable_tests,
                 gold_triage=task.gold_triage,
-                prompt_version="v1-offline",
-                policy_version="v1-deterministic",
+                prompt_version=prompt_version,
+                policy_version=policy_version,
                 model_route=report.model_route.mode,
                 steps=[
                     TraceStep(name="extract", detail="Keyword-based structured extraction"),
@@ -45,6 +52,25 @@ def run_benchmark(tasks: list[BenchmarkTask], output_dir: Path | None = None) ->
         output_dir.mkdir(parents=True, exist_ok=True)
         (output_dir / "benchmark_traces.json").write_text(dumps_pretty([trace.model_dump() for trace in traces]), encoding="utf-8")
     return traces
+
+
+def run_dataset_benchmark(
+    dataset_key: str,
+    *,
+    split: str | None = None,
+    subset: str | None = None,
+    limit: int | None = None,
+    output_dir: Path | None = None,
+    prompt_version: str = "v1-offline",
+    policy_version: str = "v1-deterministic",
+) -> list[ExperimentTrace]:
+    tasks = load_benchmark_tasks(dataset_key, split=split, subset=subset, limit=limit)
+    return run_benchmark(
+        tasks,
+        output_dir=output_dir,
+        prompt_version=prompt_version,
+        policy_version=policy_version,
+    )
 
 
 def default_demo_tasks() -> list[BenchmarkTask]:

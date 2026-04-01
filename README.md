@@ -77,7 +77,7 @@ tests/
 ```bash
 python -m venv .venv
 . .venv/Scripts/activate
-pip install -e .[dev]
+pip install -e .[dev,datasets,lightning]
 copy .env.example .env
 python -m pytest
 uvicorn apps.api.main:app --reload
@@ -96,18 +96,28 @@ PRIORI-X normalizes several task families into a shared research schema:
 
 Supported adapters include MedMCQA, MedQA, PubMedQA, FindZebra, and an optional MIMIC-like adapter gated behind explicit credentials and local documentation.
 
+Current Hugging Face dataset targets:
+
+- `openlifescienceai/medmcqa`
+- `augtoma/medqa_usmle`
+- `qiaojin/PubMedQA` using `pqa_labeled`
+- `findzebra/case-reports`
+
 ## Offline Self-Improvement
 
-Agent Lightning integration is used as an offline adapter only.
+Microsoft Agent Lightning integration is used as an offline adapter only.
 
 The workflow is:
 
 1. Run benchmark cases.
 2. Collect traces, structured outputs, safety signals, and reward components.
-3. Compare prompts, policies, and routing heuristics.
-4. Promote only candidate policies that pass safety gates.
+3. Export an Agent Lightning sandbox bundle with train/validation tasks, transitions, traces, and a baseline prompt template.
+4. Compare prompts, policies, and routing heuristics.
+5. Promote only candidate policies that pass safety gates.
 
 No hidden online updates are permitted.
+
+On Windows, PRIORI-X exports the Agent Lightning bundle for use in Linux or WSL2. Native Agent Lightning prompt optimization is only attempted when the `agentlightning` package is installed, the environment is Linux/WSL2, and offline-eval LLM credentials are available.
 
 ## Running Evaluations
 
@@ -116,6 +126,15 @@ python -m eval.benchmark_runner
 ```
 
 Generated artifacts are written to `artifacts/evals`, `artifacts/traces`, and `artifacts/reports`.
+
+To build a benchmark-driven rollout with an Agent Lightning sandbox bundle, use the offline rollout entry points in `src/agent/offline_rollout.py`. The rollout writes:
+
+- `benchmark_report.md`
+- `benchmark_traces.json`
+- `lightning_train_tasks.jsonl`
+- `lightning_validation_tasks.jsonl`
+- `lightning_transitions.jsonl`
+- `lightning_bundle_manifest.json`
 
 ## API Surface
 
@@ -149,6 +168,7 @@ The live OpenAI path is still offline-evaluation-only. The deterministic Bayesia
 - The shipped evidence catalogs are intentionally small starter registries and should be expanded with institution-approved sources before serious research use.
 - External model integration is optional and disabled by default.
 - The initial dataset adapters focus on normalization and offline evaluation, not direct dataset redistribution.
+- Native Microsoft Agent Lightning training is expected to run in Linux or WSL2; the Windows workflow exports a compatible sandbox bundle instead.
 - The research console prioritizes inspectability over production deployment concerns.
 
 ## Development Guardrails

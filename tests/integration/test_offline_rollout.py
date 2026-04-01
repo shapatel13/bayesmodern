@@ -33,5 +33,8 @@ def test_offline_rollout_writes_report_and_transitions(tmp_path: Path) -> None:
     assert traces
     assert "PRIORI-X Benchmark Report" in report
     assert (tmp_path / "benchmark_report.md").exists()
+    assert (tmp_path / "lightning_bundle_manifest.json").exists()
+    assert (tmp_path / "lightning_train_tasks.jsonl").exists()
+    assert (tmp_path / "lightning_transitions.jsonl").exists()
     transitions = traces_to_lightning_transitions(traces)
     assert transitions[0].task_id == "bench-pe-1"
