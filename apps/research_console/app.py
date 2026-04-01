@@ -83,6 +83,9 @@ def main() -> None:
                 [
                     f"- Safety mode: `{settings.safety_mode}`",
                     f"- Live external LLMs: `{settings.allow_live_llm}`",
+                    f"- Provider: `{settings.default_model_provider}`",
+                    f"- OpenAI parser: `{settings.openai_parser_model}`",
+                    f"- OpenAI reasoner: `{settings.openai_reasoning_model}`",
                     f"- Provider ready: `{secret_status.provider_ready}`",
                     f"- Trace redaction: `{settings.redact_traces}`",
                     f"- Namespace: `{settings.experiment_namespace}`",

@@ -1,0 +1,73 @@
+from __future__ import annotations
+
+from pydantic import BaseModel, Field
+
+from core.models import ClinicalDecisionContext, ClinicalFinding
+from llm.openai_client import build_openai_client
+from utils.config import Settings
+
+
+SUPPORTED_FINDINGS: dict[str, str] = {
+    "pleuritic_chest_pain": "Pleuritic chest pain",
+    "tachycardia": "Tachycardia",
+    "hypoxemia": "Hypoxemia",
+    "fever": "Fever",
+    "crackles": "Crackles",
+    "orthopnea": "Orthopnea",
+    "leg_edema": "Leg edema",
+    "pressure_chest_pain": "Pressure-like chest pain",
+    "troponin_positive": "Positive troponin",
+    "purulent_sputum": "Purulent sputum",
+}
+
+
+class OpenAIParsedContext(BaseModel):
+    specialty: str = "general_internal_medicine"
+    positive_finding_keys: list[str] = Field(default_factory=list)
+    hemodynamic_instability: bool = False
+    critical_values_present: bool = False
+    renal_impairment: bool = False
+    parser_notes: list[str] = Field(default_factory=list)
+
+
+def extract_context_with_openai(case_id: str, note_text: str, settings: Settings) -> ClinicalDecisionContext:
+    client = build_openai_client(settings)
+    finding_inventory = ", ".join(f"{key}: {label}" for key, label in SUPPORTED_FINDINGS.items())
+    parsed = client.responses.parse(
+        model=settings.openai_parser_model,
+        reasoning={"effort": "low"},
+        text_format=OpenAIParsedContext,
+        input=[
+            {
+                "role": "system",
+                "content": (
+                    "You are a conservative clinical note parser for an offline research system. "
+                    "Extract only supported structured findings explicitly or strongly implied in the note. "
+                    "Do not diagnose. Do not invent findings. Output only the structured schema."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Supported findings: {finding_inventory}\n\n"
+                    f"Clinical note:\n{note_text}"
+                ),
+            },
+        ],
+    )
+    result = parsed.output_parsed
+    findings = [
+        ClinicalFinding(key=key, label=SUPPORTED_FINDINGS[key], present=True, source_type="llm_inferred")
+        for key in result.positive_finding_keys
+        if key in SUPPORTED_FINDINGS
+    ]
+    return ClinicalDecisionContext(
+        case_id=case_id,
+        specialty=result.specialty,
+        symptoms_free_text=note_text,
+        findings=findings,
+        renal_impairment=result.renal_impairment,
+        hemodynamic_instability=result.hemodynamic_instability,
+        critical_values_present=result.critical_values_present,
+    )
+

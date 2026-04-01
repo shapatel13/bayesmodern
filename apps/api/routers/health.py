@@ -20,6 +20,9 @@ def health() -> HealthResponse:
         safety_mode=settings.safety_mode,
         allow_live_llm=settings.allow_live_llm,
         provider_ready=secret_status.provider_ready,
+        default_model_provider=settings.default_model_provider,
+        openai_parser_model=settings.openai_parser_model,
+        openai_reasoning_model=settings.openai_reasoning_model,
+        openai_verifier_model=settings.openai_verifier_model,
         missing_required_secrets=secret_status.missing_required_secrets,
     )
-

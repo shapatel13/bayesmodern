@@ -42,5 +42,7 @@ def read_root() -> dict[str, object]:
         "mode": "research",
         "allow_live_llm": settings.allow_live_llm,
         "live_llm_provider_ready": secret_status.provider_ready,
+        "default_model_provider": settings.default_model_provider,
+        "openai_reasoning_model": settings.openai_reasoning_model,
         "disclaimer": "Research only. Not for autonomous clinical use.",
     }

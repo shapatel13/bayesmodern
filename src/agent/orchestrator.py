@@ -21,7 +21,7 @@ class PRIORIXOrchestrator:
         self.next_test_engine = NextBestTestEngine()
 
     def analyze_text_case(self, case_id: str, note_text: str) -> ResearchReport:
-        context = extract_context_from_text(case_id=case_id, note_text=note_text)
+        context = extract_context_from_text(case_id=case_id, note_text=note_text, settings=self.settings)
         return self.analyze_context(context)
 
     def analyze_context(self, context) -> ResearchReport:

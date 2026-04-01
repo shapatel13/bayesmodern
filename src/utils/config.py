@@ -18,6 +18,15 @@ class Settings(BaseSettings):
     allow_live_llm: bool = Field(default=False, alias="PRIORI_ALLOW_LIVE_LLM")
     default_model_provider: str = Field(default="offline", alias="PRIORI_DEFAULT_MODEL_PROVIDER")
     default_reasoner: str = Field(default="hybrid-bayesian", alias="PRIORI_DEFAULT_REASONER")
+    openai_parser_model: str = Field(
+        default="gpt-5.4-nano-2026-03-17", alias="PRIORI_OPENAI_PARSER_MODEL"
+    )
+    openai_reasoning_model: str = Field(
+        default="gpt-5.4-nano-2026-03-17", alias="PRIORI_OPENAI_REASONING_MODEL"
+    )
+    openai_verifier_model: str = Field(
+        default="gpt-5.4-nano-2026-03-17", alias="PRIORI_OPENAI_VERIFIER_MODEL"
+    )
     redact_traces: bool = Field(default=True, alias="PRIORI_REDACT_TRACES")
     trace_retention_days: int = Field(default=30, alias="PRIORI_TRACE_RETENTION_DAYS")
     seed: int = Field(default=17, alias="PRIORI_SEED")
@@ -32,6 +41,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        populate_by_name=True,
     )
 
     @property
@@ -42,4 +52,3 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
-

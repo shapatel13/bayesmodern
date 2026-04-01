@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from core.models import ClinicalDecisionContext, ClinicalFinding
+from llm.openai_extraction import extract_context_with_openai
+from utils.config import Settings
+from utils.logging import get_logger
 
 
 KEYWORD_FINDINGS: dict[str, tuple[str, str]] = {
@@ -16,8 +19,10 @@ KEYWORD_FINDINGS: dict[str, tuple[str, str]] = {
     "sputum": ("purulent_sputum", "Purulent sputum"),
 }
 
+logger = get_logger(__name__)
 
-def extract_context_from_text(case_id: str, note_text: str) -> ClinicalDecisionContext:
+
+def _keyword_extract_context(case_id: str, note_text: str) -> ClinicalDecisionContext:
     lowered = note_text.lower()
     findings = [
         ClinicalFinding(key=key, label=label, present=True)
@@ -32,3 +37,37 @@ def extract_context_from_text(case_id: str, note_text: str) -> ClinicalDecisionC
         critical_values_present=any(token in lowered for token in ("lactate", "critical", "severe hypoxia")),
     )
 
+
+def _merge_contexts(primary: ClinicalDecisionContext, fallback: ClinicalDecisionContext) -> ClinicalDecisionContext:
+    merged_findings = {finding.key: finding for finding in fallback.findings}
+    for finding in primary.findings:
+        merged_findings[finding.key] = finding
+    return ClinicalDecisionContext(
+        case_id=primary.case_id,
+        specialty=primary.specialty or fallback.specialty,
+        findings=list(merged_findings.values()),
+        completed_tests=fallback.completed_tests,
+        comorbidities=fallback.comorbidities,
+        medications=fallback.medications,
+        symptoms_free_text=primary.symptoms_free_text or fallback.symptoms_free_text,
+        age_years=primary.age_years or fallback.age_years,
+        pregnant=primary.pregnant or fallback.pregnant,
+        renal_impairment=primary.renal_impairment or fallback.renal_impairment,
+        hemodynamic_instability=primary.hemodynamic_instability or fallback.hemodynamic_instability,
+        critical_values_present=primary.critical_values_present or fallback.critical_values_present,
+        safety_mode=primary.safety_mode or fallback.safety_mode,
+    )
+
+
+def extract_context_from_text(case_id: str, note_text: str, settings: Settings | None = None) -> ClinicalDecisionContext:
+    keyword_context = _keyword_extract_context(case_id=case_id, note_text=note_text)
+    if settings is None:
+        return keyword_context
+    if not settings.allow_live_llm or settings.default_model_provider != "openai" or not settings.openai_api_key:
+        return keyword_context
+    try:
+        openai_context = extract_context_with_openai(case_id=case_id, note_text=note_text, settings=settings)
+        return _merge_contexts(primary=openai_context, fallback=keyword_context)
+    except Exception as exc:
+        logger.warning("OpenAI parsing failed; falling back to keyword extraction: %s", exc)
+        return keyword_context

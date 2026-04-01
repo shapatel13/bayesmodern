@@ -72,6 +72,7 @@ tests/
 2. Install the package in editable mode.
 3. Copy `.env.example` to `.env`.
 4. Keep `PRIORI_ALLOW_LIVE_LLM=false` unless you are explicitly evaluating an external model offline.
+5. The default OpenAI snapshot in this repo is `gpt-5.4-nano-2026-03-17` for parser, reasoner, and verifier routing when live offline eval is enabled.
 
 ```bash
 python -m venv .venv
@@ -132,6 +133,16 @@ The Streamlit workbench includes:
 - safety and provenance view
 - calibration panel
 - JSON audit trail
+
+## OpenAI Model Configuration
+
+When `PRIORI_ALLOW_LIVE_LLM=true` and `PRIORI_DEFAULT_MODEL_PROVIDER=openai`, PRIORI-X uses:
+
+- parser: `gpt-5.4-nano-2026-03-17`
+- reasoner route: `gpt-5.4-nano-2026-03-17`
+- verifier route: `gpt-5.4-nano-2026-03-17`
+
+The live OpenAI path is still offline-evaluation-only. The deterministic Bayesian engine remains the source of truth for posterior math and threshold calculations.
 
 ## Known Limitations
 
