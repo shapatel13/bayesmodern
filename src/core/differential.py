@@ -114,6 +114,7 @@ class DifferentialEngine:
                     symptom_coverage=coverages[hypothesis.slug],
                     explaining_away=self._explanations(hypothesis.slug, normalized, coverages),
                     calibration_state=classify_calibration(normalized[hypothesis.slug], interval.high - interval.low),
+                    provenance_badges=self._provenance_badges(evidence_for[hypothesis.slug], evidence_against[hypothesis.slug]),
                 )
             )
 
@@ -134,3 +135,13 @@ class DifferentialEngine:
             return [f"{top_slug} covers overlapping findings and suppresses this hypothesis slightly."]
         return []
 
+    @staticmethod
+    def _provenance_badges(evidence_for: list, evidence_against: list) -> list[str]:
+        refs: set[str] = set()
+        source_types: set[str] = set()
+        for item in evidence_for + evidence_against:
+            refs.update(item.provenance_refs)
+            source_types.add(item.source_type.replace("_", "-"))
+        badges = [f"source:{source_type}" for source_type in sorted(source_types) if source_type]
+        badges.extend(sorted(refs))
+        return badges

@@ -40,7 +40,8 @@ def update_probability_from_evidence(
                 direction=contribution_direction(applied_lr),
                 applied_lr=applied_lr,
                 rationale=evidence.rationale,
+                provenance_refs=evidence.provenance_refs,
+                source_type=evidence.source_type,
             )
         )
     return posterior, contributions
-

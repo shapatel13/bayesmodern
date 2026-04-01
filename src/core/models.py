@@ -35,6 +35,8 @@ class FindingContribution(BaseModel):
     direction: Literal["for", "against", "neutral"]
     applied_lr: float
     rationale: str
+    provenance_refs: list[str] = Field(default_factory=list)
+    source_type: SourceType = "hard_coded"
 
 
 class HypothesisEvidence(BaseModel):
@@ -42,6 +44,8 @@ class HypothesisEvidence(BaseModel):
     label: str
     lr: LikelihoodRatioRange
     rationale: str
+    provenance_refs: list[str] = Field(default_factory=list)
+    source_type: SourceType = "hard_coded"
 
 
 class DiagnosisHypothesis(BaseModel):
@@ -65,6 +69,7 @@ class DifferentialEntry(BaseModel):
     symptom_coverage: float
     explaining_away: list[str] = Field(default_factory=list)
     calibration_state: CalibrationState
+    provenance_badges: list[str] = Field(default_factory=list)
 
 
 class DifferentialResult(BaseModel):
@@ -89,6 +94,8 @@ class CandidateTest(BaseModel):
     urgency_modifier: float = Field(ge=0.5, le=2.0, default=1.0)
     bedside: bool = False
     already_done: bool = False
+    provenance_refs: list[str] = Field(default_factory=list)
+    source_type: SourceType = "hard_coded"
 
 
 class TestRecommendation(BaseModel):
@@ -103,6 +110,7 @@ class TestRecommendation(BaseModel):
     rationale: str
     lr_plus: float
     lr_minus: float
+    provenance_badges: list[str] = Field(default_factory=list)
 
 
 class ClinicalDecisionContext(BaseModel):
@@ -137,4 +145,3 @@ class TriageAssessment(BaseModel):
 class TestRiskPenalty(BaseModel):
     total_penalty: float
     reasons: list[str]
-
