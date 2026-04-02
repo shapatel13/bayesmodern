@@ -26,6 +26,8 @@ def _contextual_test_multiplier(test: CandidateTest, context: ClinicalDecisionCo
         return 1.35 if acs_supportive_context else 0.7
     if "upper_gi_bleed" in test.target_diagnoses:
         return 1.45 if bleeding_supportive_context else 0.8
+    if acs_supportive_context and not bleeding_supportive_context and set(test.target_diagnoses) & {"pe", "pneumonia"}:
+        return 0.45
     if bleeding_supportive_context and set(test.target_diagnoses) & {"pe", "pneumonia", "heart_failure", "acs"}:
         return 0.45
     return 1.0
@@ -106,6 +108,12 @@ class NextBestTestEngine:
         recommendations: list[TestRecommendation] = []
         top_diagnosis_slug = max(current_differential, key=current_differential.get) if current_differential else None
         top_diagnosis_posterior = current_differential.get(top_diagnosis_slug, 0.0) if top_diagnosis_slug else 0.0
+        structured_signal_count = sum(1 for finding in context.findings if finding.present)
+        low_signal_multiplier = (
+            0.22
+            if structured_signal_count < 2 and not (context.hemodynamic_instability or context.critical_values_present)
+            else 1.0
+        )
         mechanism_map = {
             estimate.slug: estimate.posterior
             for estimate in (mechanism_result.ranked if mechanism_result is not None else [])
@@ -216,6 +224,7 @@ class NextBestTestEngine:
                     * diagnosis_alignment_multiplier
                     * mechanism_alignment_multiplier
                     * _contextual_test_multiplier(test, context)
+                    * low_signal_multiplier
                 )
                 / (
                     1.0
@@ -231,6 +240,8 @@ class NextBestTestEngine:
                 disposition = "defer"
             else:
                 disposition = "unnecessary"
+            if low_signal_multiplier < 1.0 and disposition == "worth_it_now" and score < (resolved_policy.next_test.worth_it_threshold * 2.5):
+                disposition = "defer"
 
             recommendations.append(
                 TestRecommendation(
@@ -248,6 +259,7 @@ class NextBestTestEngine:
                         f"{note_prefix}{mechanism_prefix}Expected movement {info_gain:.3f}; entropy gain {entropy_gain:.3f}; "
                         f"mechanistic gain {mechanistic_info_gain:.3f}; threshold gain {threshold_gain:.3f}; discrimination gain {discrimination_gain:.3f}. "
                         f"stewardship score {stewardship_score:.3f}. "
+                        f"{'Low-signal case: recommendation confidence is reduced. ' if low_signal_multiplier < 1.0 else ''}"
                         f"Risk penalties: {', '.join(risk_penalty.reasons) if risk_penalty.reasons else 'low.'}"
                     ).strip(),
                     lr_plus=average_lr_plus,

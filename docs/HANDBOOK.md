@@ -59,6 +59,8 @@ Best practice:
 - include timing, vitals, major symptoms, and any already-done tests
 - include obvious context like pregnancy, renal disease, anticoagulation, or instability
 
+PRIORI-X now parses many explicit numeric cues directly from note text, so values like BP, HR, SpO2, temperature, hemoglobin, INR, creatinine, lactate, and BNP can materially improve the output when you include them.
+
 Do not expect:
 
 - final treatment advice
@@ -180,6 +182,8 @@ This section matters most when:
 - the top recommendation is invasive or expensive
 
 If this section looks bad, do not move on to prompt optimization yet. Fix the benchmark or case labeling first.
+
+If you see a yellow clinician-review warning, treat that as the app telling you the structured evidence is still too weak, too broad, or too mixed for a clean probabilistic summary.
 
 ## Calibration Lab
 

@@ -271,6 +271,11 @@ def main() -> None:
         from llm.structured_output import ResearchReport
 
         report = ResearchReport.model_validate(report_json)
+        if report.decision_quality.needs_clinician_review:
+            st.warning(
+                "Clinician review recommended: "
+                + " ".join(report.decision_quality.reasons[:3])
+            )
         kpis = headline_cards(report)
         columns = st.columns(len(kpis))
         for column, (label, value) in zip(columns, kpis, strict=True):
@@ -314,21 +319,26 @@ def main() -> None:
                 "Hybrid Open-World" if report.reasoning_runtime.mode == "hybrid_open_world" else "Curated Bayesian",
             )
             runtime_col_4.metric(
-                "Open-World Added",
-                f"{report.reasoning_runtime.open_world_hypothesis_count} dx / {report.reasoning_runtime.open_world_test_count} tests",
+                "Review Gate",
+                "Needs Review" if report.decision_quality.needs_clinician_review else "Clear",
             )
             if report.reasoning_runtime.mode == "hybrid_open_world":
                 st.info(report.reasoning_runtime.gate_reason)
             else:
                 st.caption(report.reasoning_runtime.gate_reason)
+            if report.decision_quality.reasons:
+                st.warning("\n".join(report.decision_quality.reasons))
             with st.expander("Reasoning Trace", expanded=False):
                 st.json(report.reasoning_runtime.model_dump())
+            with st.expander("Decision Quality", expanded=False):
+                st.json(report.decision_quality.model_dump())
             st.dataframe(pd.DataFrame(provenance_rows(report)), use_container_width=True, hide_index=True)
             if report.context.medications or report.context.adverse_events:
                 st.json(
                     {
                         "medications": report.context.medications,
                         "adverse_events": report.context.adverse_events,
+                        "completed_tests": report.context.completed_tests,
                     }
                 )
             if report.contradictions:

@@ -18,6 +18,7 @@ PRIORI-X accepts a vignette, note, or structured findings and produces:
 - a parallel mechanism-layer summary of overlapping latent physiological states
 - evidence for and against each hypothesis
 - next-best-test recommendations with likelihood ratios, information gain, cost, and safety tradeoffs
+- explicit clinician-review flags when the structured evidence is too weak or too mixed for confident interpretation
 - threshold-aware action framing
 - uncertainty intervals and calibration signals
 - reproducible traces for offline evaluation
@@ -25,6 +26,8 @@ PRIORI-X accepts a vignette, note, or structured findings and produces:
 ## Mechanism Layer
 
 PRIORI-X now includes a deterministic latent-state / mechanism layer that runs alongside the disease differential. This layer is not forced into a single diagnosis and can express mixed physiology such as venous congestion plus impaired contractility, or hemorrhagic blood loss plus low effective arterial volume. Structured observations feed both the disease-level Bayesian engine and the mechanism layer, and next-best-test ranking can incorporate mechanistic information gain in addition to disease discrimination.
+
+The runtime extractor also uses more structured note understanding than before. It can now detect high-yield explicit numeric signals such as hypotension, tachycardia, hypoxemia, fever, anemia, supratherapeutic INR, elevated creatinine, elevated lactate, and elevated BNP, and it can track already-completed tests so the next-best-test engine avoids blindly re-recommending them.
 
 ## What PRIORI-X Is Not
 

@@ -24,6 +24,7 @@ def next_test_rows(report: ResearchReport) -> list[dict[str, object]]:
             "Info Gain": round(recommendation.expected_information_gain, 3),
             "Mechanism Gain": round(recommendation.mechanistic_information_gain, 3),
             "Stewardship": round(recommendation.stewardship_score, 3),
+            "Target States": ", ".join(recommendation.target_states),
             "Direct Cost": recommendation.direct_cost,
             "Downstream Cost": recommendation.downstream_cost,
             "Risk Penalty": round(recommendation.risk_penalty, 2),

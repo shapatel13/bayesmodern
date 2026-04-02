@@ -13,9 +13,17 @@ SUPPORTED_FINDINGS: dict[str, str] = {
     "tachycardia": "Tachycardia",
     "hypoxemia": "Hypoxemia",
     "fever": "Fever",
+    "hemodynamic_instability": "Hemodynamic instability",
     "crackles": "Crackles",
     "orthopnea": "Orthopnea",
     "leg_edema": "Leg edema",
+    "elevated_jvp": "Elevated jugular venous pressure",
+    "cool_extremities": "Cool extremities",
+    "warm_extremities": "Warm extremities",
+    "oliguria": "Oliguria",
+    "reduced_ef": "Reduced ejection fraction",
+    "rv_strain": "RV strain",
+    "ecg_ischemia": "Ischemic ECG changes",
     "pressure_chest_pain": "Pressure-like or crushing substernal chest pain",
     "troponin_positive": "Positive troponin",
     "diaphoresis": "Diaphoresis",
@@ -25,14 +33,23 @@ SUPPORTED_FINDINGS: dict[str, str] = {
     "active_gi_bleeding": "Active gastrointestinal bleeding",
     "melena": "Melena",
     "symptomatic_anemia": "Symptomatic anemia",
+    "low_hemoglobin": "Low hemoglobin",
+    "severe_anemia": "Severe anemia",
+    "supratherapeutic_inr": "Supratherapeutic INR",
+    "elevated_lactate": "Elevated lactate",
+    "bnp_elevated": "Elevated BNP/NT-proBNP",
+    "hyponatremia": "Hyponatremia",
 }
 
 
 class OpenAIParsedContext(BaseModel):
     specialty: str = "general_internal_medicine"
     positive_finding_keys: list[str] = Field(default_factory=list)
+    completed_tests: list[str] = Field(default_factory=list)
     medications: list[str] = Field(default_factory=list)
     adverse_events: list[str] = Field(default_factory=list)
+    age_years: int | None = None
+    pregnant: bool = False
     hemodynamic_instability: bool = False
     critical_values_present: bool = False
     renal_impairment: bool = False
@@ -63,7 +80,8 @@ def extract_context_with_openai(
                     "to the supported chest-pain findings when clearly present. "
                     "For anticoagulation-bleeding language, map warfarin or other anticoagulant exposure, melena, "
                     "hematemesis, GI bleed phrasing, and symptomatic anemia to the supported bleeding findings when clearly present. "
-                    "Also extract explicit medication names and explicit adverse-event or harm mentions as short phrases. "
+                    "Also extract explicit medication names, explicit adverse-event or harm mentions as short phrases, "
+                    "and clearly already-completed tests such as ECG, troponin, BNP, chest radiograph, D-dimer, CTA, INR, CBC, echo, endoscopy, or type and screen. "
                     "Do not diagnose. Do not invent findings. Output only the structured schema."
                 ),
             },
@@ -87,8 +105,11 @@ def extract_context_with_openai(
         specialty=result.specialty,
         symptoms_free_text=note_text,
         findings=findings,
+        completed_tests=[item.strip().lower() for item in result.completed_tests if item.strip()],
         medications=[item.strip().lower() for item in result.medications if item.strip()],
         adverse_events=[item.strip().lower() for item in result.adverse_events if item.strip()],
+        age_years=result.age_years,
+        pregnant=result.pregnant,
         renal_impairment=result.renal_impairment,
         hemodynamic_instability=result.hemodynamic_instability,
         critical_values_present=result.critical_values_present,

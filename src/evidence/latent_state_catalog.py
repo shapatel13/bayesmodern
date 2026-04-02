@@ -32,6 +32,7 @@ LATENT_STATE_CATALOG: dict[str, LatentStateDefinition] = {
         supporting_findings=[
             _evidence("fever", "Fever", positive_lr=2.8, negative_lr=0.78, rationale="Fever increases the likelihood of a distributive or inflammatory physiology."),
             _evidence("hemodynamic_instability", "Hemodynamic instability", positive_lr=1.9, negative_lr=0.88, rationale="Shock-like instability supports distributive physiology when present."),
+            _evidence("elevated_lactate", "Elevated lactate", positive_lr=2.1, negative_lr=0.86, rationale="Elevated lactate supports high-acuity distributive physiology."),
             _evidence("tachycardia", "Tachycardia", positive_lr=1.45, negative_lr=0.9, rationale="Compensatory tachycardia often accompanies distributive states."),
             _evidence("warm_extremities", "Warm extremities", positive_lr=2.2, negative_lr=0.9, rationale="Warm vasodilated extremities support distributive physiology."),
             _evidence("purulent_sputum", "Purulent sputum", positive_lr=1.4, negative_lr=0.95, rationale="An infectious pulmonary source can support a distributive picture."),
@@ -49,10 +50,12 @@ LATENT_STATE_CATALOG: dict[str, LatentStateDefinition] = {
         supporting_findings=[
             _evidence("pressure_chest_pain", "Pressure-like chest pain", positive_lr=1.7, negative_lr=0.92, rationale="Ischemic chest pain raises concern for pump failure from myocardial ischemia."),
             _evidence("troponin_positive", "Positive troponin", positive_lr=3.6, negative_lr=0.72, rationale="Troponin elevation increases concern for ischemic or myocardial injury physiology."),
+            _evidence("ecg_ischemia", "Ischemic ECG changes", positive_lr=2.8, negative_lr=0.74, rationale="Ischemic ECG changes support cardiogenic low-forward-flow physiology."),
             _evidence("pain_radiation", "Radiation to arm or jaw", positive_lr=1.5, negative_lr=0.95, rationale="Typical ischemic radiation supports cardiogenic physiology."),
             _evidence("diaphoresis", "Diaphoresis", positive_lr=1.4, negative_lr=0.96, rationale="Diaphoresis supports a high-acuity cardiogenic or ischemic picture."),
             _evidence("hemodynamic_instability", "Hemodynamic instability", positive_lr=2.0, negative_lr=0.86, rationale="Instability supports low forward flow states."),
             _evidence("reduced_ef", "Reduced ejection fraction", positive_lr=4.0, negative_lr=0.6, rationale="Reduced EF strongly supports impaired contractility."),
+            _evidence("bnp_elevated", "Elevated BNP/NT-proBNP", positive_lr=1.8, negative_lr=0.86, rationale="Elevated natriuretic peptides support congestion linked to impaired contractility."),
         ],
         contradicting_findings=[
             _evidence("warm_extremities", "Warm extremities", positive_lr=0.7, negative_lr=1.08, rationale="Warm vasodilated extremities slightly argue against primary cardiogenic physiology."),
@@ -70,6 +73,8 @@ LATENT_STATE_CATALOG: dict[str, LatentStateDefinition] = {
             _evidence("active_gi_bleeding", "Active gastrointestinal bleeding", positive_lr=2.9, negative_lr=0.74, rationale="Active bleeding strongly supports low effective arterial volume."),
             _evidence("melena", "Melena", positive_lr=1.9, negative_lr=0.9, rationale="Melena supports ongoing blood loss and preload depletion."),
             _evidence("symptomatic_anemia", "Symptomatic anemia", positive_lr=2.0, negative_lr=0.84, rationale="Symptomatic anemia can reflect clinically meaningful blood loss."),
+            _evidence("low_hemoglobin", "Low hemoglobin", positive_lr=1.8, negative_lr=0.9, rationale="Measured anemia supports preload depletion from blood loss."),
+            _evidence("severe_anemia", "Severe anemia", positive_lr=2.2, negative_lr=0.82, rationale="Severe anemia strongly supports clinically meaningful preload depletion."),
             _evidence("oliguria", "Oliguria", positive_lr=1.55, negative_lr=0.92, rationale="Oliguria can reflect poor renal perfusion from low effective arterial volume."),
         ],
         contradicting_findings=[
@@ -88,6 +93,7 @@ LATENT_STATE_CATALOG: dict[str, LatentStateDefinition] = {
             _evidence("crackles", "Crackles", positive_lr=2.1, negative_lr=0.86, rationale="Pulmonary crackles support congestion or edema."),
             _evidence("leg_edema", "Leg edema", positive_lr=2.4, negative_lr=0.8, rationale="Peripheral edema supports venous congestion."),
             _evidence("elevated_jvp", "Elevated JVP", positive_lr=3.1, negative_lr=0.7, rationale="Elevated JVP is a strong venous congestion clue."),
+            _evidence("bnp_elevated", "Elevated BNP/NT-proBNP", positive_lr=2.2, negative_lr=0.74, rationale="Elevated BNP supports venous congestion and increased filling pressures."),
             _evidence("hypoxemia", "Hypoxemia", positive_lr=1.25, negative_lr=0.96, rationale="Hypoxemia can reflect pulmonary venous congestion or edema."),
         ],
         contradicting_findings=[
@@ -135,7 +141,10 @@ LATENT_STATE_CATALOG: dict[str, LatentStateDefinition] = {
             _evidence("active_gi_bleeding", "Active gastrointestinal bleeding", positive_lr=3.4, negative_lr=0.7, rationale="Direct bleeding evidence strongly supports active blood loss."),
             _evidence("melena", "Melena", positive_lr=2.8, negative_lr=0.76, rationale="Melena materially increases bleeding-related belief."),
             _evidence("symptomatic_anemia", "Symptomatic anemia", positive_lr=2.1, negative_lr=0.84, rationale="Symptomatic anemia supports clinically meaningful blood loss."),
+            _evidence("low_hemoglobin", "Low hemoglobin", positive_lr=1.9, negative_lr=0.9, rationale="Measured anemia supports active blood loss."),
+            _evidence("severe_anemia", "Severe anemia", positive_lr=2.5, negative_lr=0.82, rationale="Severe anemia strongly supports active blood loss."),
             _evidence("anticoagulated", "On anticoagulation", positive_lr=1.8, negative_lr=0.94, rationale="Anticoagulation raises the risk of hemorrhagic physiology."),
+            _evidence("supratherapeutic_inr", "Supratherapeutic INR", positive_lr=2.6, negative_lr=0.82, rationale="Supratherapeutic INR strongly supports anticoagulant-amplified bleeding physiology."),
             _evidence("hemodynamic_instability", "Hemodynamic instability", positive_lr=1.75, negative_lr=0.9, rationale="Instability increases concern for clinically important bleeding."),
         ],
         contradicting_findings=[],
@@ -151,6 +160,8 @@ LATENT_STATE_CATALOG: dict[str, LatentStateDefinition] = {
             _evidence("pain_radiation", "Radiation to arm or jaw", positive_lr=1.55, negative_lr=0.94, rationale="Classic radiation supports ischemic physiology."),
             _evidence("diaphoresis", "Diaphoresis", positive_lr=1.35, negative_lr=0.96, rationale="Diaphoresis can accompany acute ischemic physiology."),
             _evidence("troponin_positive", "Positive troponin", positive_lr=3.0, negative_lr=0.74, rationale="Troponin elevation supports ischemic injury."),
+            _evidence("ecg_ischemia", "Ischemic ECG changes", positive_lr=3.2, negative_lr=0.7, rationale="Ischemic ECG changes strongly support thrombotic or ischemic tendency."),
+            _evidence("hemodynamic_instability", "Hemodynamic instability", positive_lr=1.4, negative_lr=0.92, rationale="Instability raises concern for serious thrombotic or ischemic physiology."),
             _evidence("pleuritic_chest_pain", "Pleuritic chest pain", positive_lr=1.45, negative_lr=0.96, rationale="Pleuritic chest pain can support thromboembolic ischemic pathology."),
             _evidence("hypoxemia", "Hypoxemia", positive_lr=1.3, negative_lr=0.95, rationale="Hypoxemia supports high-acuity pulmonary vascular processes."),
             _evidence("rv_strain", "RV strain", positive_lr=3.0, negative_lr=0.72, rationale="RV strain strongly supports acute thrombo-obstructive physiology."),
@@ -167,6 +178,7 @@ LATENT_STATE_CATALOG: dict[str, LatentStateDefinition] = {
             _evidence("anticoagulated", "On anticoagulation", positive_lr=2.2, negative_lr=0.88, rationale="Anticoagulation increases the chance of medication-driven physiology."),
             _evidence("active_gi_bleeding", "Active gastrointestinal bleeding", positive_lr=1.6, negative_lr=0.96, rationale="Bleeding on anticoagulation can reflect medication effect."),
             _evidence("symptomatic_anemia", "Symptomatic anemia", positive_lr=1.4, negative_lr=0.98, rationale="Medication-related harm may present through anemia or bleeding."),
+            _evidence("supratherapeutic_inr", "Supratherapeutic INR", positive_lr=2.8, negative_lr=0.78, rationale="Supratherapeutic INR strongly supports a medication-toxicity contribution."),
         ],
         contradicting_findings=[],
     ),
@@ -186,4 +198,3 @@ LATENT_STATE_CATALOG: dict[str, LatentStateDefinition] = {
         contradicting_findings=[],
     ),
 }
-

@@ -49,6 +49,50 @@ def test_keyword_extraction_handles_simple_negation() -> None:
     assert findings["fever"] is False
 
 
+def test_keyword_extraction_parses_numeric_vitals_and_labs() -> None:
+    context = extract_context_from_text(
+        case_id="extract-numeric-1",
+        note_text=(
+            "68-year-old pregnant patient with BP 82/50, HR 128, SpO2 86%, temp 38.6 C, "
+            "hemoglobin 6.8, INR 4.2, creatinine 2.6, lactate 4.8, BNP 1400."
+        ),
+        settings=Settings(_env_file=None, allow_live_llm=False),
+    )
+    findings = {finding.key: finding for finding in context.findings}
+
+    assert context.age_years == 68
+    assert context.pregnant is True
+    assert context.hemodynamic_instability is True
+    assert context.critical_values_present is True
+    assert context.renal_impairment is True
+    assert {"tachycardia", "hypoxemia", "fever", "low_hemoglobin", "severe_anemia", "supratherapeutic_inr", "creatinine_elevated", "elevated_lactate", "bnp_elevated"} <= set(findings)
+    assert findings["severe_anemia"].value == 6.8
+
+
+def test_keyword_extraction_detects_completed_tests_from_note_text() -> None:
+    context = extract_context_from_text(
+        case_id="extract-tests-1",
+        note_text=(
+            "ECG showed anterior changes. Troponin 0.12. BNP 900. Chest x-ray with edema. "
+            "INR 3.8. Type and screen sent."
+        ),
+        settings=Settings(_env_file=None, allow_live_llm=False),
+    )
+
+    assert {"ecg", "hs_troponin", "bnp", "cxr", "pt_inr", "type_screen"} <= set(context.completed_tests)
+
+
+def test_keyword_extraction_turns_numeric_troponin_and_ecg_language_into_findings() -> None:
+    context = extract_context_from_text(
+        case_id="extract-acs-result-1",
+        note_text="ECG showed ischemic changes and troponin 0.12 in a patient with chest pressure.",
+        settings=Settings(_env_file=None, allow_live_llm=False),
+    )
+    findings = {finding.key for finding in context.findings}
+
+    assert {"ecg_ischemia", "troponin_positive", "pressure_chest_pain"} <= findings
+
+
 def test_extraction_falls_back_when_openai_parse_raises(monkeypatch) -> None:
     from llm import extraction
 

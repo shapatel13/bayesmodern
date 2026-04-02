@@ -27,6 +27,20 @@ LR_CATALOG: dict[str, list[HypothesisEvidence]] = {
             provenance_refs=["rule:wells_pe"],
         ),
         HypothesisEvidence(
+            finding_key="rv_strain",
+            label="RV strain",
+            lr=LikelihoodRatioRange(positive_lr=3.2, negative_lr=0.65, positive_lr_low=2.2, positive_lr_high=4.3),
+            rationale="RV strain materially supports an acute pulmonary vascular obstructive process.",
+            provenance_refs=["rule:wells_pe", "mechanism:starter_registry"],
+        ),
+        HypothesisEvidence(
+            finding_key="hemodynamic_instability",
+            label="Hemodynamic instability",
+            lr=LikelihoodRatioRange(positive_lr=1.8, negative_lr=0.82, positive_lr_low=1.2, positive_lr_high=2.5),
+            rationale="Instability raises concern for high-risk PE when paired with compatible symptoms.",
+            provenance_refs=["rule:wells_pe"],
+        ),
+        HypothesisEvidence(
             finding_key="fever",
             label="Fever",
             lr=LikelihoodRatioRange(positive_lr=0.7, negative_lr=1.1, positive_lr_low=0.5, positive_lr_high=0.9),
@@ -56,6 +70,13 @@ LR_CATALOG: dict[str, list[HypothesisEvidence]] = {
             rationale="Purulent sputum increases the likelihood of bacterial pneumonia.",
             provenance_refs=["study:cxr_pneumonia"],
         ),
+        HypothesisEvidence(
+            finding_key="hypoxemia",
+            label="Hypoxemia",
+            lr=LikelihoodRatioRange(positive_lr=1.5, negative_lr=0.82, positive_lr_low=1.1, positive_lr_high=2.0),
+            rationale="Hypoxemia supports clinically significant lower respiratory infection.",
+            provenance_refs=["study:cxr_pneumonia"],
+        ),
     ],
     "heart_failure": [
         HypothesisEvidence(
@@ -78,6 +99,27 @@ LR_CATALOG: dict[str, list[HypothesisEvidence]] = {
             lr=LikelihoodRatioRange(positive_lr=1.8, negative_lr=0.8, positive_lr_low=1.2, positive_lr_high=2.5),
             rationale="Peripheral edema adds support for systemic congestion.",
             provenance_refs=["study:bnp_hf"],
+        ),
+        HypothesisEvidence(
+            finding_key="elevated_jvp",
+            label="Elevated JVP",
+            lr=LikelihoodRatioRange(positive_lr=2.6, negative_lr=0.68, positive_lr_low=1.8, positive_lr_high=3.5),
+            rationale="Elevated JVP strongly supports venous congestion from heart failure physiology.",
+            provenance_refs=["study:bnp_hf", "mechanism:starter_registry"],
+        ),
+        HypothesisEvidence(
+            finding_key="bnp_elevated",
+            label="Elevated BNP/NT-proBNP",
+            lr=LikelihoodRatioRange(positive_lr=3.2, negative_lr=0.45, positive_lr_low=2.2, positive_lr_high=4.4),
+            rationale="Elevated natriuretic peptides support congestion and heart failure physiology.",
+            provenance_refs=["study:bnp_hf"],
+        ),
+        HypothesisEvidence(
+            finding_key="reduced_ef",
+            label="Reduced ejection fraction",
+            lr=LikelihoodRatioRange(positive_lr=3.8, negative_lr=0.6, positive_lr_low=2.6, positive_lr_high=5.0),
+            rationale="Reduced EF materially supports a heart failure syndrome driven by impaired contractility.",
+            provenance_refs=["mechanism:starter_registry"],
         ),
     ],
     "acs": [
@@ -109,6 +151,20 @@ LR_CATALOG: dict[str, list[HypothesisEvidence]] = {
             rationale="Troponin elevation strongly supports myocardial injury etiologies.",
             provenance_refs=["registry:acs_symptom_profile"],
         ),
+        HypothesisEvidence(
+            finding_key="ecg_ischemia",
+            label="Ischemic ECG changes",
+            lr=LikelihoodRatioRange(positive_lr=3.6, negative_lr=0.55, positive_lr_low=2.4, positive_lr_high=4.8),
+            rationale="Ischemic ECG changes materially increase the likelihood of ACS.",
+            provenance_refs=["registry:acs_symptom_profile"],
+        ),
+        HypothesisEvidence(
+            finding_key="hemodynamic_instability",
+            label="Hemodynamic instability",
+            lr=LikelihoodRatioRange(positive_lr=1.75, negative_lr=0.86, positive_lr_low=1.2, positive_lr_high=2.3),
+            rationale="Instability raises concern for high-acuity ACS in the right symptom context.",
+            provenance_refs=["registry:acs_symptom_profile"],
+        ),
     ],
     "upper_gi_bleed": [
         HypothesisEvidence(
@@ -133,10 +189,31 @@ LR_CATALOG: dict[str, list[HypothesisEvidence]] = {
             provenance_refs=["study:cbc_gi_bleed"],
         ),
         HypothesisEvidence(
+            finding_key="low_hemoglobin",
+            label="Low hemoglobin",
+            lr=LikelihoodRatioRange(positive_lr=2.0, negative_lr=0.82, positive_lr_low=1.4, positive_lr_high=2.6),
+            rationale="Measured low hemoglobin supports clinically relevant blood loss.",
+            provenance_refs=["study:cbc_gi_bleed"],
+        ),
+        HypothesisEvidence(
+            finding_key="severe_anemia",
+            label="Severe anemia",
+            lr=LikelihoodRatioRange(positive_lr=2.8, negative_lr=0.74, positive_lr_low=2.0, positive_lr_high=3.6),
+            rationale="Severe anemia strongly supports significant hemorrhagic burden.",
+            provenance_refs=["study:cbc_gi_bleed"],
+        ),
+        HypothesisEvidence(
             finding_key="anticoagulated",
             label="On anticoagulation",
             lr=LikelihoodRatioRange(positive_lr=2.1, negative_lr=0.8, positive_lr_low=1.4, positive_lr_high=2.8),
             rationale="Active anticoagulation raises the likelihood that ongoing bleeding reflects anticoagulant-associated hemorrhage.",
+            provenance_refs=["study:warfarin_bleeding"],
+        ),
+        HypothesisEvidence(
+            finding_key="supratherapeutic_inr",
+            label="Supratherapeutic INR",
+            lr=LikelihoodRatioRange(positive_lr=2.7, negative_lr=0.82, positive_lr_low=1.8, positive_lr_high=3.6),
+            rationale="Supratherapeutic INR increases concern for anticoagulant-amplified hemorrhage.",
             provenance_refs=["study:warfarin_bleeding"],
         ),
         HypothesisEvidence(

@@ -39,6 +39,16 @@ class ReasoningRuntimeTrace(BaseModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class DecisionQualityAssessment(BaseModel):
+    needs_clinician_review: bool = False
+    reasons: list[str] = Field(default_factory=list)
+    structured_signal_count: int = 0
+    top_differential_gap: float = 0.0
+    low_signal_case: bool = False
+    broad_differential: bool = False
+    mixed_mechanism_uncertainty: bool = False
+
+
 class ResearchReport(BaseModel):
     context: ClinicalDecisionContext
     differential: DifferentialResult
@@ -47,6 +57,7 @@ class ResearchReport(BaseModel):
     triage: TriageAssessment
     threshold_decision: ThresholdDecision
     reasoning_runtime: ReasoningRuntimeTrace = Field(default_factory=ReasoningRuntimeTrace)
+    decision_quality: DecisionQualityAssessment = Field(default_factory=DecisionQualityAssessment)
     contradictions: list[str] = Field(default_factory=list)
     provenance_warnings: list[str] = Field(default_factory=list)
     generation_audit: GenerationAuditResult | None = None

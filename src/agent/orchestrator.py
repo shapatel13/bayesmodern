@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from core.differential import DifferentialEngine
 from core.latent_states import LatentStateEngine
+from core.mechanism_coupling import apply_mechanism_coupling
 from core.next_best_test import NextBestTestEngine
 from core.policy import ReasoningPolicy, get_reasoning_policy
 from core.thresholds import DecisionCostModel, calculate_thresholds, explain_threshold_position
@@ -19,6 +20,7 @@ from llm.open_world_reasoning import (
     merge_open_world_hypotheses,
 )
 from llm.structured_output import ResearchReport
+from llm.structured_output import DecisionQualityAssessment
 from llm.structured_output import ReasoningRuntimeTrace
 from llm.validators import validate_report
 from utils.config import Settings, get_settings
@@ -65,6 +67,38 @@ def _open_world_gate_reason(differential) -> str:
     )
 
 
+def _decision_quality(context, differential, mechanism_result) -> DecisionQualityAssessment:
+    structured_signal_count = sum(1 for finding in context.findings if finding.present)
+    top_entry = differential.ranked[0] if differential.ranked else None
+    runner_up = differential.ranked[1] if len(differential.ranked) > 1 else None
+    top_gap = (top_entry.posterior - runner_up.posterior) if top_entry and runner_up else (top_entry.posterior if top_entry else 0.0)
+    reasons: list[str] = []
+    low_signal_case = structured_signal_count < 2
+    broad_differential = bool(top_entry and (top_entry.posterior < 0.38 or top_gap < 0.08 or top_entry.symptom_coverage < 0.25))
+    mixed_mechanism_uncertainty = mechanism_result.mixed_physiology and (not mechanism_result.active_states or (top_entry and top_entry.posterior < 0.52))
+    if low_signal_case:
+        reasons.append("Very few structured findings were extracted from the case.")
+    if top_entry and top_entry.posterior < 0.38:
+        reasons.append("No disease hypothesis reached a strong posterior probability.")
+    if top_entry and top_entry.symptom_coverage < 0.25:
+        reasons.append("The top diagnosis is supported by limited structured evidence coverage.")
+    if runner_up and top_gap < 0.08:
+        reasons.append("The leading diagnoses remain tightly clustered.")
+    if mixed_mechanism_uncertainty:
+        reasons.append("Mechanism layer suggests mixed physiology that still needs clinician review.")
+    if context.hemodynamic_instability and top_entry and top_entry.posterior < 0.5:
+        reasons.append("High-acuity physiology is present without a decisive lead diagnosis.")
+    return DecisionQualityAssessment(
+        needs_clinician_review=bool(reasons),
+        reasons=reasons,
+        structured_signal_count=structured_signal_count,
+        top_differential_gap=max(top_gap, 0.0),
+        low_signal_case=low_signal_case,
+        broad_differential=broad_differential,
+        mixed_mechanism_uncertainty=mixed_mechanism_uncertainty,
+    )
+
+
 class PRIORIXOrchestrator:
     def __init__(self, settings: Settings | None = None, *, policy_version: str = "v1-deterministic") -> None:
         self.settings = settings or get_settings()
@@ -97,15 +131,20 @@ class PRIORIXOrchestrator:
     def analyze_context(self, context, *, policy_version: str | None = None, prompt_template: str | None = None) -> ResearchReport:
         policy: ReasoningPolicy = get_reasoning_policy(policy_version) if policy_version else self.policy
         base_hypotheses = default_hypotheses(context=context)
+        mechanism_result = self.mechanism_engine.infer(
+            context,
+            seed=self.settings.seed,
+        )
+        coupled_hypotheses = apply_mechanism_coupling(base_hypotheses, mechanism_result)
         base_differential = self.differential_engine.rank(
             context,
-            base_hypotheses,
+            coupled_hypotheses,
             seed=self.settings.seed,
             policy=policy,
         )
         open_world_plan = None
         differential = base_differential
-        hypotheses = base_hypotheses
+        hypotheses = coupled_hypotheses
         gate_reason = (
             "Open-world expansion disabled by configuration."
             if not self.settings.open_world_reasoning_enabled
@@ -124,10 +163,17 @@ class PRIORIXOrchestrator:
             except Exception as exc:
                 logger.warning("Open-world reasoning generation failed; continuing with deterministic hypothesis pool: %s", exc)
             context = augment_context_with_open_world_findings(context, open_world_plan)
-            hypotheses = merge_open_world_hypotheses(
+            mechanism_result = self.mechanism_engine.infer(
+                context,
+                seed=self.settings.seed,
+            )
+            hypotheses = apply_mechanism_coupling(
+                merge_open_world_hypotheses(
                 default_hypotheses(context=context),
                 open_world_plan,
                 context=context,
+                ),
+                mechanism_result,
             )
             differential = self.differential_engine.rank(
                 context,
@@ -139,10 +185,6 @@ class PRIORIXOrchestrator:
             entry.posterior * DISEASE_PROFILES[entry.slug].urgency_weight
             for entry in differential.ranked
             if DISEASE_PROFILES.get(entry.slug, None) and DISEASE_PROFILES[entry.slug].dangerous
-        )
-        mechanism_result = self.mechanism_engine.infer(
-            context,
-            seed=self.settings.seed,
         )
         triage = assess_triage(dangerous_mass, context.hemodynamic_instability, context.critical_values_present)
         urgency_multiplier = 1.0
@@ -195,6 +237,7 @@ class PRIORIXOrchestrator:
                 open_world_test_count=len(open_world_plan.suggested_tests) if open_world_plan else 0,
                 notes=(open_world_plan.notes if open_world_plan else []),
             ),
+            decision_quality=_decision_quality(context, differential, mechanism_result),
             model_route=route_models(self.settings),
         )
         report.contradictions = validate_report(report)
