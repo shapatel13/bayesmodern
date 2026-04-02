@@ -60,6 +60,27 @@ def _sample_trace() -> ExperimentTrace:
             "posterior_mass_top3": 0.7,
             "model_note": "demo",
         },
+        mechanism_states={
+            "ranked": [
+                {
+                    "slug": "thrombotic_ischemic_tendency",
+                    "name": "Thrombotic / ischemic tendency",
+                    "category": "vascular",
+                    "prior": 0.2,
+                    "posterior": 0.73,
+                    "interval_low": 0.61,
+                    "interval_high": 0.82,
+                    "evidence_for": [],
+                    "evidence_against": [],
+                    "confidence_state": "moderately_uncertain",
+                    "provenance_badges": ["source:hard-coded"],
+                }
+            ],
+            "active_states": ["Thrombotic / ischemic tendency"],
+            "mixed_physiology": False,
+            "summary": "Dominant mechanism signal: Thrombotic / ischemic tendency.",
+            "model_note": "demo mechanism note",
+        },
         next_best_tests=[
             {
                 "slug": "d_dimer",
@@ -67,9 +88,11 @@ def _sample_trace() -> ExperimentTrace:
                 "score": 0.2,
                 "expected_information_gain": 0.1,
                 "expected_posterior_movement": 0.15,
+                "mechanistic_information_gain": 0.12,
                 "stewardship_score": 0.2,
                 "disposition": "worth_it_now",
                 "discriminates_between": ["pe"],
+                "target_states": ["thrombotic_ischemic_tendency"],
                 "rationale": "demo",
                 "lr_plus": 2.0,
                 "lr_minus": 0.2,
@@ -89,6 +112,28 @@ def _sample_trace() -> ExperimentTrace:
             "action": "test",
             "clinician_language": "demo clinician threshold framing",
             "plain_language": "demo plain-language threshold framing",
+        },
+        reasoning_runtime={
+            "mode": "hybrid_open_world",
+            "open_world_considered": True,
+            "open_world_triggered": True,
+            "gate_reason": "Base curated posterior was broad.",
+            "base_top_diagnosis": "pe",
+            "base_top_posterior": 0.41,
+            "final_top_diagnosis": "pe",
+            "final_top_posterior": 0.7,
+            "open_world_hypothesis_count": 2,
+            "open_world_test_count": 1,
+            "notes": ["Converted open-world candidates back into deterministic scoring."],
+        },
+        decision_quality={
+            "needs_clinician_review": True,
+            "reasons": ["Broad differential remained after scoring."],
+            "structured_signal_count": 3,
+            "top_differential_gap": 0.08,
+            "low_signal_case": False,
+            "broad_differential": True,
+            "mixed_mechanism_uncertainty": False,
         },
         contradictions=[],
         provenance_warnings=[],
@@ -176,7 +221,13 @@ def test_export_lightning_bundle_writes_machine_readable_files(tmp_path: Path, m
     transition_payload = json.loads(transition_lines[0])
     assert transition_payload["task_id"] == "task-1"
     assert transition_payload["state"]["curriculum_key"] == "broad_medical_feedback_lab"
+    assert transition_payload["state"]["reasoning_mode"] == "hybrid_open_world"
+    assert transition_payload["state"]["needs_clinician_review"] is True
     assert transition_payload["info"]["source_hf_dataset"] == "augtoma/medqa_usmle"
+    assert transition_payload["action"]["top_mechanism"] == "thrombotic_ischemic_tendency"
+    assert transition_payload["action"]["recommended_test_target_states"] == ["thrombotic_ischemic_tendency"]
+    assert transition_payload["info"]["mechanism_mixed_physiology"] is False
+    assert transition_payload["info"]["decision_quality_reasons"] == ["Broad differential remained after scoring."]
 
     manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest_payload["runtime"]["mode"] == "export_only"

@@ -126,6 +126,7 @@ def traces_to_lightning_transitions(traces: list[ExperimentTrace]) -> list[Light
     transitions: list[LightningTransition] = []
     for trace in traces:
         top = trace.report.differential.ranked[0] if trace.report.differential.ranked else None
+        top_mechanism = trace.report.mechanism_states.ranked[0] if trace.report.mechanism_states.ranked else None
         recommendation = trace.report.next_best_tests[0] if trace.report.next_best_tests else None
         task_metadata = dict(trace.task_metadata)
         transitions.append(
@@ -140,10 +141,18 @@ def traces_to_lightning_transitions(traces: list[ExperimentTrace]) -> list[Light
                     "curriculum_key": task_metadata.get("curriculum_key"),
                     "curriculum_component": task_metadata.get("curriculum_component"),
                     "reward_profile": trace.reward.reward_profile if trace.reward else "unknown",
+                    "reasoning_mode": trace.report.reasoning_runtime.mode,
+                    "open_world_triggered": trace.report.reasoning_runtime.open_world_triggered,
+                    "needs_clinician_review": trace.report.decision_quality.needs_clinician_review,
+                    "low_signal_case": trace.report.decision_quality.low_signal_case,
+                    "mixed_mechanism_uncertainty": trace.report.decision_quality.mixed_mechanism_uncertainty,
                 },
                 action={
                     "top_diagnosis": top.slug if top else None,
+                    "top_mechanism": top_mechanism.slug if top_mechanism else None,
+                    "active_mechanisms": trace.report.mechanism_states.active_states,
                     "recommended_test": recommendation.slug if recommendation else None,
+                    "recommended_test_target_states": recommendation.target_states if recommendation else [],
                     "medications": trace.report.context.medications,
                     "adverse_events": trace.report.context.adverse_events,
                     "generation_audit_action": (
@@ -168,6 +177,13 @@ def traces_to_lightning_transitions(traces: list[ExperimentTrace]) -> list[Light
                     "gold_risk_grade": task_metadata.get("physician_risk_grade"),
                     "contradictions": trace.report.contradictions,
                     "provenance_warnings": trace.report.provenance_warnings,
+                    "mechanism_summary": trace.report.mechanism_states.summary,
+                    "mechanism_mixed_physiology": trace.report.mechanism_states.mixed_physiology,
+                    "decision_quality_reasons": trace.report.decision_quality.reasons,
+                    "structured_signal_count": trace.report.decision_quality.structured_signal_count,
+                    "top_differential_gap": trace.report.decision_quality.top_differential_gap,
+                    "reasoning_gate_reason": trace.report.reasoning_runtime.gate_reason,
+                    "reasoning_notes": trace.report.reasoning_runtime.notes,
                 },
             )
         )
