@@ -40,3 +40,34 @@ def test_reviewed_case_store_resolves_default_destination(tmp_path, monkeypatch)
     destination = reviewed_case_store.resolve_reviewed_cases_destination(Settings(_env_file=None))
 
     assert destination.name == "reviewed_cases.local.jsonl"
+
+
+def test_reviewed_case_store_summarizes_rows(tmp_path) -> None:
+    settings = Settings(_env_file=None, reviewed_cases_path=str(tmp_path / "reviewed_cases.local.jsonl"))
+    first = reviewed_case_store.build_reviewed_case_row(
+        note_text="Crushing chest pain with hypotension.",
+        gold_diagnosis="acs",
+        acceptable_tests=["ecg"],
+        gold_triage="emergent",
+        review_status="approved",
+        reviewer_id="tester",
+        review_notes="Approved regression case.",
+    )
+    second = reviewed_case_store.build_reviewed_case_row(
+        note_text="Fever and crackles.",
+        gold_diagnosis="pneumonia",
+        acceptable_tests=["cxr"],
+        gold_triage="expedited",
+        review_status="draft",
+        reviewer_id="tester",
+        review_notes="Draft case.",
+    )
+    reviewed_case_store.append_reviewed_case(first, settings)
+    reviewed_case_store.append_reviewed_case(second, settings)
+
+    summary = reviewed_case_store.summarize_reviewed_cases(settings)
+
+    assert summary["total_cases"] == 2
+    assert summary["approved_cases"] == 1
+    assert summary["draft_cases"] == 1
+    assert summary["recent_rows"][0]["gold_diagnosis"] == "pneumonia"

@@ -66,3 +66,36 @@ def append_reviewed_case(row: dict[str, Any], settings: Settings | None = None) 
         handle.write(json.dumps(row, ensure_ascii=True))
         handle.write("\n")
     return destination
+
+
+def load_reviewed_cases(settings: Settings | None = None, *, limit: int | None = None) -> list[dict[str, Any]]:
+    destination = resolve_reviewed_cases_destination(settings)
+    if not destination.exists():
+        return []
+
+    rows: list[dict[str, Any]] = []
+    with destination.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            payload = line.strip()
+            if not payload:
+                continue
+            rows.append(json.loads(payload))
+
+    rows.reverse()
+    if limit is not None:
+        return rows[:limit]
+    return rows
+
+
+def summarize_reviewed_cases(settings: Settings | None = None) -> dict[str, Any]:
+    rows = load_reviewed_cases(settings)
+    approved = sum(1 for row in rows if str(row.get("review_status") or "").lower() == "approved")
+    draft = sum(1 for row in rows if str(row.get("review_status") or "").lower() == "draft")
+    diagnoses = [str(row.get("gold_diagnosis") or "unknown") for row in rows]
+    return {
+        "total_cases": len(rows),
+        "approved_cases": approved,
+        "draft_cases": draft,
+        "recent_rows": rows[:5],
+        "diagnoses": diagnoses[:10],
+    }

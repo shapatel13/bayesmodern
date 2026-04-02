@@ -17,7 +17,7 @@ import pandas as pd
 import streamlit as st
 
 from agent.lightning_adapter import detect_lightning_runtime
-from agent.lightning_train import train_curriculum_prompt
+from agent.lightning_train import auto_improve_prompt, train_curriculum_prompt
 from agent.offline_rollout import run_curriculum_offline_experiment, run_dataset_offline_experiment
 from agent.orchestrator import PRIORIXOrchestrator
 from agent.prompt_registry import get_active_prompt_record, list_prompt_records
@@ -25,7 +25,13 @@ from agent.policy_optimizer import optimize_curriculum_policy, optimize_dataset_
 from core.policy import list_reasoning_policies
 from datasets.catalog import get_dataset_spec, list_dataset_specs
 from datasets.curricula import get_lightning_curriculum, list_lightning_curricula
-from datasets.reviewed_case_store import append_reviewed_case, build_reviewed_case_row, resolve_reviewed_cases_destination
+from datasets.reviewed_case_store import (
+    append_reviewed_case,
+    build_reviewed_case_row,
+    load_reviewed_cases,
+    resolve_reviewed_cases_destination,
+    summarize_reviewed_cases,
+)
 from eval.experiment_registry import compare_experiment_summaries, list_experiment_summaries
 from eval.presets import get_research_preset, list_research_presets
 from security.secrets import validate_live_llm_config
@@ -89,6 +95,8 @@ def main() -> None:
     active_prompt = get_active_prompt_record()
     prompt_records = list_prompt_records()
     reviewed_cases_destination = resolve_reviewed_cases_destination(settings)
+    reviewed_cases_summary = summarize_reviewed_cases(settings)
+    reviewed_recent_rows = load_reviewed_cases(settings, limit=5)
     research_presets = list_research_presets()
     experiment_summaries = list_experiment_summaries(EXPERIMENTS_ROOT)
     api_base_url = os.environ.get("PRIORI_API_BASE_URL")
@@ -369,6 +377,55 @@ def main() -> None:
         "Public Hugging Face tracks like MedMCQA, MedQA, PubMedQA, and FindZebra can now be mixed into a single "
         "Lightning feedback curriculum for offline reward-bearing policy optimization."
     )
+    st.markdown("#### Reviewed Cases Inbox")
+    inbox_col_1, inbox_col_2, inbox_col_3 = st.columns(3)
+    inbox_col_1.metric("Reviewed Cases", reviewed_cases_summary["total_cases"])
+    inbox_col_2.metric("Approved", reviewed_cases_summary["approved_cases"])
+    inbox_col_3.metric("Draft", reviewed_cases_summary["draft_cases"])
+    st.caption(f"Local reviewed-case inbox: `{reviewed_cases_destination}`")
+    if reviewed_recent_rows:
+        inbox_table = pd.DataFrame(
+            [
+                {
+                    "id": row.get("id"),
+                    "diagnosis": row.get("gold_diagnosis"),
+                    "triage": row.get("gold_triage"),
+                    "status": row.get("review_status"),
+                    "captured_at": row.get("captured_at"),
+                }
+                for row in reviewed_recent_rows
+            ]
+        )
+        st.dataframe(inbox_table, use_container_width=True, hide_index=True)
+    else:
+        st.info("No local reviewed cases saved yet. Use `Save This Case To Reviewed Cases` after a run.")
+
+    improve_inbox_left, improve_inbox_right = st.columns([1.2, 1])
+    with improve_inbox_left:
+        st.caption(
+            "Use the inbox when you want Lightning to improve on the cases you actually care about. "
+            "Approved rows are safest for the default continuous-improvement loop."
+        )
+    with improve_inbox_right:
+        inbox_train_cap = st.slider("Inbox Train Cap / Component", min_value=1, max_value=32, value=8)
+        inbox_validation_cap = st.slider("Inbox Validation Cap / Component", min_value=0, max_value=16, value=4)
+        if st.button("Run Improvement From Reviewed Inbox", use_container_width=True):
+            with st.spinner("Running reviewed-case improvement loop..."):
+                try:
+                    training_summary = auto_improve_prompt(
+                        EXPERIMENTS_ROOT,
+                        settings=settings,
+                        policy_version="v1-deterministic",
+                        train_cap_per_component=inbox_train_cap,
+                        validation_cap_per_component=inbox_validation_cap,
+                        n_runners=1,
+                    )
+                    st.session_state["prompt_training_summary"] = training_summary.model_dump()
+                    st.session_state.pop("prompt_training_error", None)
+                    experiment_summaries = list_experiment_summaries(EXPERIMENTS_ROOT)
+                except Exception as exc:
+                    st.session_state["prompt_training_error"] = str(exc)
+
     st.markdown("#### Prompt Improvement")
     improvement_left, improvement_right = st.columns([1, 1.4])
     with improvement_left:
