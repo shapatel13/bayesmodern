@@ -41,6 +41,7 @@ class LightningBundleManifest(BaseModel):
     traces_path: str
     report_path: str
     prompt_template_baseline: str
+    baseline_policy_version: str = "v1-deterministic"
     curriculum_key: str | None = None
     component_datasets: list[str] = Field(default_factory=list)
     reward_profiles: list[str] = Field(default_factory=list)
@@ -183,6 +184,7 @@ def export_lightning_bundle(
     report_markdown: str,
     output_dir: Path,
     settings: Settings | None = None,
+    policy_version: str = "v1-deterministic",
     curriculum_key: str | None = None,
     component_datasets: list[str] | None = None,
     reward_profiles: list[str] | None = None,
@@ -226,6 +228,7 @@ def export_lightning_bundle(
         traces_path=str(traces_path),
         report_path=str(report_path),
         prompt_template_baseline=baseline_prompt_template(),
+        baseline_policy_version=policy_version,
         curriculum_key=curriculum_key,
         component_datasets=component_datasets or [],
         reward_profiles=reward_profiles or [],
@@ -242,21 +245,29 @@ def _import_agentlightning() -> Any:
 def create_lightning_rollout_agent(settings: Settings | None = None) -> Any:
     settings = settings or get_settings()
     agl = _import_agentlightning()
-    orchestrator = PRIORIXOrchestrator(settings=settings)
     reward_model = CompositeRewardModel()
 
     @agl.rollout
-    def priori_x_prompt_rollout(task: BenchmarkTask, prompt_template: Any) -> float:
+    def priori_x_prompt_rollout(task: BenchmarkTask, prompt_template: Any, policy_version: str = "v1-deterministic") -> float:
+        orchestrator = PRIORIXOrchestrator(settings=settings, policy_version=policy_version)
         rendered_prompt = render_prompt_template(prompt_template, task.prompt)
         if hasattr(agl, "emit_object"):
-            agl.emit_object({"task_id": task.task_id, "source_dataset": task.source_dataset, "task_type": task.task_type})
-        report = orchestrator.analyze_text_case(task.task_id, rendered_prompt)
+            agl.emit_object(
+                {
+                    "task_id": task.task_id,
+                    "source_dataset": task.source_dataset,
+                    "task_type": task.task_type,
+                    "policy_version": policy_version,
+                }
+            )
+        report = orchestrator.analyze_text_case(task.task_id, rendered_prompt, policy_version=policy_version)
         reward = reward_model.score(task, report)
         if hasattr(agl, "emit_object"):
             agl.emit_object(
                 {
                     "top_diagnosis": report.differential.ranked[0].slug if report.differential.ranked else None,
                     "recommended_test": report.next_best_tests[0].slug if report.next_best_tests else None,
+                    "policy_version": policy_version,
                     "failure_categories": reward.failure_categories,
                 }
             )
@@ -285,7 +296,7 @@ def build_native_lightning_recipe(
     trainer = agl.Trainer(
         algorithm=algorithm,
         n_runners=n_runners,
-        initial_resources={"prompt_template": baseline_prompt_template()},
+        initial_resources={"prompt_template": baseline_prompt_template(), "policy_version": "v1-deterministic"},
         adapter=agl.TraceToMessages(),
     )
     return NativeLightningRecipe(agent=agent, trainer=trainer, runtime=runtime)

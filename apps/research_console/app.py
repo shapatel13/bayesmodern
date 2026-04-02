@@ -1,7 +1,16 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+
+SRC_PATH = Path(__file__).resolve().parents[2] / "src"
+if str(SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(SRC_PATH))
+
+from utils.bootstrap import prefer_local_package
+
+prefer_local_package("datasets", SRC_PATH / "datasets")
 
 import pandas as pd
 import streamlit as st
@@ -9,6 +18,8 @@ import streamlit as st
 from agent.lightning_adapter import detect_lightning_runtime
 from agent.offline_rollout import run_curriculum_offline_experiment, run_dataset_offline_experiment
 from agent.orchestrator import PRIORIXOrchestrator
+from agent.policy_optimizer import optimize_curriculum_policy, optimize_dataset_policy
+from core.policy import list_reasoning_policies
 from datasets.catalog import get_dataset_spec, list_dataset_specs
 from datasets.curricula import get_lightning_curriculum, list_lightning_curricula
 from eval.experiment_registry import compare_experiment_summaries, list_experiment_summaries
@@ -67,6 +78,7 @@ def main() -> None:
     settings = get_settings()
     secret_status = validate_live_llm_config(settings)
     lightning_runtime = detect_lightning_runtime(settings)
+    policy_options = list_reasoning_policies()
     orchestrator = PRIORIXOrchestrator(settings)
     dataset_specs = list_dataset_specs()
     lightning_curricula = list_lightning_curricula()
@@ -149,8 +161,14 @@ def main() -> None:
             st.info(lightning_runtime.reason)
         else:
             st.success(lightning_runtime.reason)
-        selected_demo_case = st.selectbox("Guided Demo Case", list(GUIDED_DEMO_CASES.keys()), key="guided_demo_case")
-        if st.button("Load Guided Demo"):
+        selected_case_policy = st.selectbox(
+            "Case Policy",
+            [policy.version for policy in policy_options],
+            index=0,
+            help="Switch the deterministic reasoning policy used for live case analysis.",
+        )
+        selected_demo_case = st.selectbox("Starter Case Template", list(GUIDED_DEMO_CASES.keys()), key="guided_demo_case")
+        if st.button("Load Starter Case"):
             st.session_state["case_text"] = GUIDED_DEMO_CASES[selected_demo_case]
         st.caption("Every output remains inspectable, versionable, and explicitly research-only.")
 
@@ -160,7 +178,7 @@ def main() -> None:
 
     if run:
         try:
-            report = orchestrator.analyze_text_case("console-case", case_text)
+            report = orchestrator.analyze_text_case("console-case", case_text, policy_version=selected_case_policy)
             st.session_state["report_json"] = report.model_dump()
             st.session_state.pop("analysis_error", None)
         except Exception as exc:
@@ -237,7 +255,7 @@ def main() -> None:
     )
     st.info(
         "Public Hugging Face tracks like MedMCQA, MedQA, PubMedQA, and FindZebra can now be mixed into a single "
-        "Lightning feedback curriculum for offline reward-bearing optimization."
+        "Lightning feedback curriculum for offline reward-bearing policy optimization."
     )
 
     demo_presets = [
@@ -245,20 +263,20 @@ def main() -> None:
         for preset in research_presets
         if preset.key in {"clinical_reasoning_demo_lab", "ed_triage_demo_lab", "medication_safety_demo_lab"}
     ]
-    st.markdown("#### Morning Ready")
+    st.markdown("#### Fast Start")
     morning_col_1, morning_col_2, morning_col_3 = st.columns(3)
     morning_col_1.info(
-        "Use `Pulmonary Embolism`, `Heart Failure`, or `Medication Safety` in the guided case selector for a fast first run."
+        "Use `Pulmonary Embolism`, `Heart Failure`, or `Medication Safety` in the starter-case selector for a fast first run."
     )
     morning_col_2.info(
-        "Run `Clinical Reasoning Demo Lab` or the bundled specialty demos if you want experiment outputs without external datasets."
+        "Run a built-in smoke track if you want to verify the stack end to end before switching to Hugging Face or local clinical datasets."
     )
     morning_col_3.info(
         "If OpenAI is unavailable, PRIORI-X still falls back to the deterministic engine and preserves your prior console state."
     )
 
     if demo_presets:
-        st.markdown("#### One-Click Demo Tracks")
+        st.markdown("#### Built-In Smoke Tracks")
         demo_columns = st.columns(len(demo_presets))
         for column, preset in zip(demo_columns, demo_presets, strict=True):
             if column.button(preset.label, use_container_width=True):
@@ -283,7 +301,12 @@ def main() -> None:
         train_limit = st.slider("Train Cases", min_value=1, max_value=32, value=8)
         validation_limit = st.slider("Validation Cases", min_value=0, max_value=16, value=4)
         prompt_version = st.text_input("Prompt Version", value="v1-offline")
-        policy_version = st.text_input("Policy Version", value="v1-deterministic")
+        policy_version = st.selectbox(
+            "Policy Version",
+            [policy.version for policy in policy_options],
+            index=0,
+            key="manual_rollout_policy_version",
+        )
         if st.button("Run Offline Dataset Rollout", type="primary", use_container_width=True):
             with st.spinner("Running offline benchmark and exporting Lightning bundle..."):
                 try:
@@ -328,6 +351,13 @@ def main() -> None:
         )
         if selected_preset.notes:
             st.info(selected_preset.notes)
+        preset_policy_version = st.selectbox(
+            "Preset Policy Override",
+            [policy.version for policy in policy_options],
+            index=0,
+            key="preset_policy_version",
+            help="Use a different deterministic policy while keeping the preset's dataset and prompt defaults.",
+        )
         if st.button("Run Specialty Track", use_container_width=True):
             with st.spinner(f"Running {selected_preset.label}..."):
                 try:
@@ -339,7 +369,7 @@ def main() -> None:
                         validation_limit=selected_preset.validation_limit,
                         settings=settings,
                         prompt_version=selected_preset.prompt_version,
-                        policy_version=selected_preset.policy_version,
+                        policy_version=preset_policy_version,
                     )
                     st.session_state["lab_experiment_summary"] = experiment_summary.model_dump()
                     st.session_state["lab_experiment_report"] = report
@@ -412,6 +442,64 @@ def main() -> None:
                     st.session_state["lab_error"] = str(exc)
     with curriculum_table_col:
         st.dataframe(pd.DataFrame(curriculum_rows(lightning_curricula)), use_container_width=True, hide_index=True)
+
+    st.markdown("#### Offline Policy Search")
+    search_col_1, search_col_2 = st.columns([1, 1.2])
+    with search_col_1:
+        search_mode = st.radio("Optimization Target", ["Dataset", "Curriculum"], horizontal=True)
+        baseline_policy_version = st.selectbox(
+            "Baseline Policy",
+            [policy.version for policy in policy_options],
+            index=0,
+            key="policy_search_baseline",
+        )
+        candidate_policy_versions = [
+            policy.version
+            for policy in policy_options
+            if policy.version != baseline_policy_version
+        ]
+        if search_mode == "Dataset":
+            if st.button("Optimize Selected Dataset Policy", use_container_width=True):
+                with st.spinner("Running offline policy optimization on the selected dataset..."):
+                    try:
+                        optimization = optimize_dataset_policy(
+                            selected_dataset,
+                            EXPERIMENTS_ROOT,
+                            subset=subset_value or None,
+                            train_limit=train_limit,
+                            validation_limit=validation_limit,
+                            settings=settings,
+                            prompt_version=prompt_version,
+                            baseline_policy_version=baseline_policy_version,
+                            candidate_policy_versions=candidate_policy_versions,
+                        )
+                        st.session_state["lab_policy_optimization"] = optimization.model_dump()
+                        st.success(f"Selected policy `{optimization.selected_policy_version}`.")
+                    except Exception as exc:
+                        st.session_state["lab_error"] = str(exc)
+        else:
+            if st.button("Optimize Selected Curriculum Policy", use_container_width=True):
+                with st.spinner("Running offline policy optimization on the selected curriculum..."):
+                    try:
+                        optimization = optimize_curriculum_policy(
+                            selected_curriculum.key,
+                            EXPERIMENTS_ROOT,
+                            settings=settings,
+                            baseline_policy_version=baseline_policy_version,
+                            candidate_policy_versions=candidate_policy_versions,
+                            train_cap_per_component=int(curriculum_train_cap),
+                            validation_cap_per_component=int(curriculum_validation_cap),
+                        )
+                        st.session_state["lab_policy_optimization"] = optimization.model_dump()
+                        st.success(f"Selected policy `{optimization.selected_policy_version}`.")
+                    except Exception as exc:
+                        st.session_state["lab_error"] = str(exc)
+    with search_col_2:
+        if "lab_policy_optimization" in st.session_state:
+            optimization = st.session_state["lab_policy_optimization"]
+            st.json(optimization)
+        else:
+            st.info("Run dataset or curriculum policy optimization to compare deterministic Bayesian policies offline.")
 
     if "lab_experiment_summary" in st.session_state:
         from eval.experiment_registry import ExperimentSummary

@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+SRC_PATH = Path(__file__).resolve().parents[2] / "src"
+if str(SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(SRC_PATH))
+
+from utils.bootstrap import prefer_local_package
+
+prefer_local_package("datasets", SRC_PATH / "datasets")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

@@ -134,6 +134,21 @@ def comparison_rows(comparison: ExperimentComparison) -> list[dict[str, object]]
                 },
             ]
         )
+    if comparison.delta_generation_risk_accuracy or comparison.delta_generation_high_risk_recall:
+        rows.extend(
+            [
+                {
+                    "Metric": "Generation Risk Accuracy",
+                    "Delta": round(comparison.delta_generation_risk_accuracy, 3),
+                    "Preferred Direction": "Higher",
+                },
+                {
+                    "Metric": "High-Risk Generation Recall",
+                    "Delta": round(comparison.delta_generation_high_risk_recall, 3),
+                    "Preferred Direction": "Higher",
+                },
+            ]
+        )
     return rows
 
 

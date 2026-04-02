@@ -37,6 +37,8 @@ class DiseaseProfile(BaseModel):
             name=self.name,
             category=self.category,
             prior=self.prior,
+            dangerous=self.dangerous,
+            urgency_weight=self.urgency_weight,
             supporting_findings=supporting,
             contradicting_findings=contradicting,
         )

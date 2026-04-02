@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from agent.lightning_adapter import LightningRuntimeStatus
+from agent.policy_optimizer import PolicyOptimizationSummary
 from agent.trace_schema import ExperimentTrace, RewardBreakdown, TraceStep
 from apps.api.main import app
 from eval.benchmark_runner import BenchmarkMetricsSummary
@@ -156,17 +157,37 @@ def _sample_experiment(experiment_id: str) -> ExperimentSummary:
     )
 
 
+def _sample_optimization() -> PolicyOptimizationSummary:
+    return PolicyOptimizationSummary(
+        optimization_id="opt_1",
+        created_at="2026-04-02T12:00:00+00:00",
+        objective_kind="dataset",
+        objective_key="medmcqa",
+        artifact_dir="artifacts/evals/experiments/opt_1",
+        baseline_policy_version="v1-deterministic",
+        candidate_policy_versions=["v1-balanced-bayesian"],
+        selected_policy_version="v1-balanced-bayesian",
+        selected_experiment_id="exp_new",
+        selection_reason="Improved reward without safety regressions.",
+        lightning_runtime_mode="export_only",
+        notes=["test fixture"],
+    )
+
+
 def test_research_dataset_catalog_and_status_endpoints() -> None:
     client = TestClient(app)
 
     status_response = client.get("/api/research/status")
     datasets_response = client.get("/api/research/datasets")
+    policies_response = client.get("/api/research/policies")
     presets_response = client.get("/api/research/presets")
 
     assert status_response.status_code == 200
     assert "lightning_runtime" in status_response.json()
     assert datasets_response.status_code == 200
     assert any(dataset["key"] == "medmcqa" for dataset in datasets_response.json()["datasets"])
+    assert policies_response.status_code == 200
+    assert any(policy["version"] == "v1-balanced-bayesian" for policy in policies_response.json()["policies"])
     assert presets_response.status_code == 200
     assert any(preset["key"] == "rare_disease_lab" for preset in presets_response.json()["presets"])
 
@@ -182,12 +203,21 @@ def test_research_benchmark_and_experiment_endpoints(monkeypatch) -> None:
         "run_dataset_offline_experiment",
         lambda *args, **kwargs: (_sample_experiment("exp_new"), [sample_trace], "# Demo Report"),
     )
+    monkeypatch.setattr(
+        research,
+        "optimize_dataset_policy",
+        lambda *args, **kwargs: _sample_optimization(),
+    )
     monkeypatch.setattr(research, "list_experiment_summaries", lambda *args, **kwargs: [_sample_experiment("exp_old"), _sample_experiment("exp_new")])
 
     client = TestClient(app)
 
     benchmark_response = client.post("/api/research/benchmark/dataset", json={"dataset_key": "medmcqa", "limit": 1})
     rollout_response = client.post("/api/research/rollout/dataset", json={"dataset_key": "medmcqa", "train_limit": 1, "validation_limit": 1})
+    optimize_response = client.post(
+        "/api/research/optimize/dataset-policy",
+        json={"dataset_key": "medmcqa", "train_limit": 1, "validation_limit": 1},
+    )
     preset_rollout_response = client.post("/api/research/rollout/preset", json={"preset_key": "core_diagnostic_lab"})
     list_response = client.get("/api/research/experiments")
     compare_response = client.post(
@@ -199,6 +229,8 @@ def test_research_benchmark_and_experiment_endpoints(monkeypatch) -> None:
     assert benchmark_response.json()["summary"]["top1_differential_recall"] == 1.0
     assert rollout_response.status_code == 200
     assert rollout_response.json()["experiment"]["experiment_id"] == "exp_new"
+    assert optimize_response.status_code == 200
+    assert optimize_response.json()["optimization"]["selected_policy_version"] == "v1-balanced-bayesian"
     assert preset_rollout_response.status_code == 200
     assert list_response.status_code == 200
     assert len(list_response.json()["experiments"]) == 2

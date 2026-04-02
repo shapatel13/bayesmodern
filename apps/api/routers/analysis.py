@@ -12,8 +12,12 @@ router = APIRouter(tags=["analysis"])
 
 @router.post("/analyze", response_model=ResearchReport)
 def analyze_case(request: AnalysisRequest) -> ResearchReport:
-    orchestrator = PRIORIXOrchestrator()
-    return orchestrator.analyze_text_case(case_id=request.case_id, note_text=request.note_text)
+    orchestrator = PRIORIXOrchestrator(policy_version=request.policy_version)
+    return orchestrator.analyze_text_case(
+        case_id=request.case_id,
+        note_text=request.note_text,
+        policy_version=request.policy_version,
+    )
 
 
 @router.post("/benchmark/sample")

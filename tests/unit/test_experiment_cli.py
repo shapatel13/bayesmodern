@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from agent.lightning_adapter import LightningRuntimeStatus
+from agent.policy_optimizer import PolicyOptimizationSummary
 from eval.benchmark_runner import BenchmarkMetricsSummary
 from eval.experiment_cli import main
 from eval.experiment_registry import ExperimentSummary
@@ -94,3 +95,39 @@ def test_experiment_cli_lists_curricula(capsys) -> None:
     captured = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert any(item["key"] == "broad_medical_feedback_lab" for item in captured)
+
+
+def test_experiment_cli_lists_policies(capsys) -> None:
+    exit_code = main(["list-policies"])
+
+    captured = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert any(item["version"] == "v1-balanced-bayesian" for item in captured)
+
+
+def test_experiment_cli_optimize_dataset_policy(monkeypatch, capsys) -> None:
+    from eval import experiment_cli
+
+    monkeypatch.setattr(
+        experiment_cli,
+        "optimize_dataset_policy",
+        lambda *args, **kwargs: PolicyOptimizationSummary(
+            optimization_id="opt_1",
+            created_at="2026-04-02T12:00:00+00:00",
+            objective_kind="dataset",
+            objective_key="medmcqa",
+            artifact_dir="artifacts/evals/experiments/opt_1",
+            baseline_policy_version="v1-deterministic",
+            candidate_policy_versions=["v1-balanced-bayesian"],
+            selected_policy_version="v1-balanced-bayesian",
+            selected_experiment_id="exp_balanced",
+            selection_reason="Improved reward without safety regression.",
+            lightning_runtime_mode="export_only",
+        ),
+    )
+
+    exit_code = main(["optimize-dataset-policy", "medmcqa"])
+
+    captured = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert captured["selected_policy_version"] == "v1-balanced-bayesian"

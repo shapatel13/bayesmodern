@@ -50,6 +50,8 @@ class ExperimentComparison(BaseModel):
     delta_log_loss: float
     delta_medication_recall: float = 0.0
     delta_adverse_event_recall: float = 0.0
+    delta_generation_risk_accuracy: float = 0.0
+    delta_generation_high_risk_recall: float = 0.0
     promoted_dimensions: list[str]
     regressed_dimensions: list[str]
     promotion_gate: "PromotionGateDecision | None" = None
@@ -213,6 +215,26 @@ def compare_experiment_summaries(
     if regressed:
         regressed_dimensions.append("adverse_event_recall")
 
+    delta_generation_risk_accuracy, promoted, regressed = _metric_delta(
+        baseline.benchmark_summary.generation_risk_accuracy,
+        candidate.benchmark_summary.generation_risk_accuracy,
+        preferred_direction="higher",
+    )
+    if promoted:
+        promoted_dimensions.append("generation_risk_accuracy")
+    if regressed:
+        regressed_dimensions.append("generation_risk_accuracy")
+
+    delta_generation_high_risk_recall, promoted, regressed = _metric_delta(
+        baseline.benchmark_summary.generation_high_risk_recall,
+        candidate.benchmark_summary.generation_high_risk_recall,
+        preferred_direction="higher",
+    )
+    if promoted:
+        promoted_dimensions.append("generation_high_risk_recall")
+    if regressed:
+        regressed_dimensions.append("generation_high_risk_recall")
+
     comparison = ExperimentComparison(
         baseline_experiment_id=baseline.experiment_id,
         candidate_experiment_id=candidate.experiment_id,
@@ -226,6 +248,8 @@ def compare_experiment_summaries(
         delta_log_loss=delta_log_loss,
         delta_medication_recall=delta_medication_recall,
         delta_adverse_event_recall=delta_adverse_event_recall,
+        delta_generation_risk_accuracy=delta_generation_risk_accuracy,
+        delta_generation_high_risk_recall=delta_generation_high_risk_recall,
         promoted_dimensions=promoted_dimensions,
         regressed_dimensions=regressed_dimensions,
     )
@@ -257,6 +281,11 @@ def evaluate_promotion_gate(
             blockers.append("medication extraction recall regressed")
         if candidate.benchmark_summary.adverse_event_recall < baseline.benchmark_summary.adverse_event_recall:
             blockers.append("adverse-event recall regressed")
+    if candidate.task_family == "generation_audit":
+        if candidate.benchmark_summary.generation_high_risk_recall < baseline.benchmark_summary.generation_high_risk_recall:
+            blockers.append("high-risk generation recall regressed")
+        if candidate.benchmark_summary.generation_risk_accuracy < baseline.benchmark_summary.generation_risk_accuracy:
+            blockers.append("generation risk accuracy regressed")
 
     if comparison.delta_mean_reward > 0:
         rationale.append("mean reward improved")
@@ -268,6 +297,10 @@ def evaluate_promotion_gate(
         rationale.append("medication extraction recall improved")
     if comparison.delta_adverse_event_recall > 0:
         rationale.append("adverse-event recall improved")
+    if comparison.delta_generation_risk_accuracy > 0:
+        rationale.append("generation risk accuracy improved")
+    if comparison.delta_generation_high_risk_recall > 0:
+        rationale.append("high-risk generation recall improved")
     if comparison.delta_unsafe_recommendation_rate < 0:
         rationale.append("unsafe recommendation rate decreased")
 

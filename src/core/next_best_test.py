@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from core.bayes import bayes_update
+from core.bayes import bayes_update, shannon_entropy
 from core.models import CandidateTest, ClinicalDecisionContext, TestRecommendation
+from core.policy import ReasoningPolicy, get_reasoning_policy
+from core.thresholds import DecisionThresholds
 from core.risk import compute_test_risk_penalty
 
 
@@ -11,13 +13,71 @@ def _expected_posterior_movement(current_probability: float, lr_plus: float, lr_
     return (positive_shift + negative_shift) / 2.0
 
 
+def _entropy_gain(current_probability: float, lr_plus: float, lr_minus: float) -> float:
+    current_entropy = shannon_entropy({"target": current_probability, "other": max(1.0 - current_probability, 1e-6)})
+    positive_entropy = shannon_entropy(
+        {"target": bayes_update(current_probability, lr_plus), "other": max(1.0 - bayes_update(current_probability, lr_plus), 1e-6)}
+    )
+    negative_entropy = shannon_entropy(
+        {"target": bayes_update(current_probability, lr_minus), "other": max(1.0 - bayes_update(current_probability, lr_minus), 1e-6)}
+    )
+    return max(0.0, current_entropy - ((positive_entropy + negative_entropy) / 2.0))
+
+
+def _threshold_crossing_gain(
+    current_probability: float,
+    lr_plus: float,
+    lr_minus: float,
+    thresholds: DecisionThresholds | None,
+) -> float:
+    if thresholds is None:
+        return 0.0
+    positive_probability = bayes_update(current_probability, lr_plus)
+    negative_probability = bayes_update(current_probability, lr_minus)
+    thresholds_to_check = (
+        thresholds.test_threshold,
+        thresholds.admit_threshold,
+        thresholds.treatment_threshold,
+        thresholds.icu_threshold,
+    )
+    gain = 0.0
+    for threshold in thresholds_to_check:
+        current_side = current_probability >= threshold
+        if (positive_probability >= threshold) != current_side:
+            gain += 0.5
+        if (negative_probability >= threshold) != current_side:
+            gain += 0.5
+    return gain
+
+
+def _discrimination_gain(current_differential: dict[str, float], test: CandidateTest) -> float:
+    if len(test.target_diagnoses) < 2:
+        return 0.0
+    ranked_targets = sorted(
+        ((diagnosis, current_differential.get(diagnosis, 0.0)) for diagnosis in test.target_diagnoses),
+        key=lambda item: item[1],
+        reverse=True,
+    )
+    top_targets = ranked_targets[:2]
+    if len(top_targets) < 2:
+        return 0.0
+    first_lr = test.diagnosis_lrs.get(top_targets[0][0])
+    second_lr = test.diagnosis_lrs.get(top_targets[1][0])
+    if first_lr is None or second_lr is None:
+        return 0.0
+    return abs(first_lr.positive_lr - second_lr.positive_lr) + abs(first_lr.negative_lr - second_lr.negative_lr)
+
+
 class NextBestTestEngine:
     def rank(
         self,
         current_differential: dict[str, float],
         candidates: list[CandidateTest],
         context: ClinicalDecisionContext,
+        thresholds: DecisionThresholds | None = None,
+        policy: ReasoningPolicy | str | None = None,
     ) -> list[TestRecommendation]:
+        resolved_policy = get_reasoning_policy(policy) if isinstance(policy, str) or policy is None else policy
         recommendations: list[TestRecommendation] = []
         for test in candidates:
             note_prefix = f"{test.evidence_note} " if test.evidence_note else ""
@@ -44,6 +104,8 @@ class NextBestTestEngine:
                 continue
 
             movements: list[float] = []
+            entropy_gains: list[float] = []
+            threshold_gains: list[float] = []
             target_lrs_plus: list[float] = []
             target_lrs_minus: list[float] = []
             for diagnosis in test.target_diagnoses:
@@ -52,23 +114,48 @@ class NextBestTestEngine:
                 if probability <= 0 or lr is None:
                     continue
                 movements.append(_expected_posterior_movement(probability, lr.positive_lr, lr.negative_lr))
+                entropy_gains.append(_entropy_gain(probability, lr.positive_lr, lr.negative_lr))
+                threshold_gains.append(_threshold_crossing_gain(probability, lr.positive_lr, lr.negative_lr, thresholds))
                 target_lrs_plus.append(lr.positive_lr)
                 target_lrs_minus.append(lr.negative_lr)
 
             info_gain = sum(movements) / max(len(movements), 1)
+            entropy_gain = sum(entropy_gains) / max(len(entropy_gains), 1)
+            threshold_gain = sum(threshold_gains) / max(len(threshold_gains), 1)
+            discrimination_gain = _discrimination_gain(current_differential, test)
             average_lr_plus = sum(target_lrs_plus) / max(len(target_lrs_plus), 1)
             average_lr_minus = sum(target_lrs_minus) / max(len(target_lrs_minus), 1)
             risk_penalty = compute_test_risk_penalty(test, context)
             cost_penalty = (test.direct_cost + test.downstream_cost) / 1_000.0
+            evidence_value = (
+                (info_gain * resolved_policy.next_test.movement_weight)
+                + (entropy_gain * resolved_policy.next_test.entropy_weight)
+                + (discrimination_gain * 0.05 * resolved_policy.next_test.discrimination_weight)
+                + (threshold_gain * 0.1 * resolved_policy.next_test.threshold_weight)
+            )
+            urgency_bonus = 1.0 + (
+                resolved_policy.next_test.urgency_bonus_weight
+                if context.hemodynamic_instability or context.critical_values_present
+                else 0.0
+            )
             stewardship_score = max(
                 0.0,
-                info_gain * test.actionability / (1.0 + (2.0 * cost_penalty) + (1.5 * risk_penalty.total_penalty)),
+                (
+                    evidence_value
+                    * max(test.actionability, 0.1) ** resolved_policy.next_test.actionability_weight
+                    * urgency_bonus
+                )
+                / (
+                    1.0
+                    + (resolved_policy.next_test.cost_weight * cost_penalty)
+                    + (resolved_policy.next_test.risk_weight * risk_penalty.total_penalty)
+                ),
             )
             score = stewardship_score * test.urgency_modifier
 
-            if score >= 0.1:
+            if score >= resolved_policy.next_test.worth_it_threshold:
                 disposition = "worth_it_now"
-            elif score >= 0.04:
+            elif score >= resolved_policy.next_test.defer_threshold:
                 disposition = "defer"
             else:
                 disposition = "unnecessary"
@@ -84,7 +171,8 @@ class NextBestTestEngine:
                     disposition=disposition,
                     discriminates_between=test.target_diagnoses,
                     rationale=(
-                        f"{note_prefix}Expected information gain {info_gain:.3f}; "
+                        f"{note_prefix}Expected movement {info_gain:.3f}; entropy gain {entropy_gain:.3f}; "
+                        f"threshold gain {threshold_gain:.3f}; discrimination gain {discrimination_gain:.3f}. "
                         f"stewardship score {stewardship_score:.3f}. "
                         f"Risk penalties: {', '.join(risk_penalty.reasons) if risk_penalty.reasons else 'low.'}"
                     ).strip(),

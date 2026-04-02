@@ -53,6 +53,8 @@ class DiagnosisHypothesis(BaseModel):
     name: str
     category: str = "general"
     prior: float = Field(gt=0, lt=1)
+    dangerous: bool = False
+    urgency_weight: float = Field(default=0.0, ge=0.0, le=1.0)
     supporting_findings: list[HypothesisEvidence] = Field(default_factory=list)
     contradicting_findings: list[HypothesisEvidence] = Field(default_factory=list)
 
@@ -75,6 +77,7 @@ class DifferentialEntry(BaseModel):
 class DifferentialResult(BaseModel):
     ranked: list[DifferentialEntry]
     posterior_mass_top3: float
+    posterior_entropy: float = Field(default=0.0, ge=0.0)
     model_note: str
 
 

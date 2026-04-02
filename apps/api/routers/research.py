@@ -6,14 +6,17 @@ from fastapi import APIRouter, HTTPException
 
 from agent.lightning_adapter import detect_lightning_runtime
 from agent.offline_rollout import run_curriculum_offline_experiment, run_dataset_offline_experiment
+from agent.policy_optimizer import optimize_curriculum_policy, optimize_dataset_policy
 from apps.api.schemas.research import (
     CurriculumCatalogResponse,
     CurriculumComponentItem,
+    CurriculumPolicyOptimizationRequest,
     CurriculumRolloutRequest,
     DatasetBenchmarkRequest,
     DatasetBenchmarkResponse,
     DatasetCatalogItem,
     DatasetCatalogResponse,
+    DatasetPolicyOptimizationRequest,
     DatasetRolloutRequest,
     DatasetRolloutResponse,
     ExperimentComparisonRequest,
@@ -21,10 +24,14 @@ from apps.api.schemas.research import (
     ExperimentListResponse,
     PresetCatalogResponse,
     PresetRolloutRequest,
+    PolicyCatalogResponse,
+    PolicyOptimizationResponse,
     ResearchPresetItem,
     ResearchStatusResponse,
+    ReasoningPolicyItem,
     LightningCurriculumItem,
 )
+from core.policy import ReasoningPolicy, list_reasoning_policies
 from datasets.catalog import BenchmarkDatasetSpec, get_dataset_spec, list_dataset_specs
 from datasets.curricula import LightningCurriculumSpec, get_lightning_curriculum, list_lightning_curricula
 from eval.benchmark_runner import build_markdown_report, run_dataset_benchmark, summarize_benchmark
@@ -97,6 +104,17 @@ def _curriculum_item(curriculum: LightningCurriculumSpec) -> LightningCurriculum
     )
 
 
+def _policy_item(policy: ReasoningPolicy) -> ReasoningPolicyItem:
+    return ReasoningPolicyItem(
+        version=policy.version,
+        label=policy.label,
+        description=policy.description,
+        differential=policy.differential,
+        next_test=policy.next_test,
+        thresholds=policy.thresholds,
+    )
+
+
 def _resolve_experiment_or_404(experiment_id: str):
     for summary in list_experiment_summaries(ARTIFACTS_ROOT):
         if summary.experiment_id == experiment_id:
@@ -124,6 +142,11 @@ def research_datasets() -> DatasetCatalogResponse:
 @router.get("/research/curricula", response_model=CurriculumCatalogResponse)
 def research_curricula() -> CurriculumCatalogResponse:
     return CurriculumCatalogResponse(curricula=[_curriculum_item(curriculum) for curriculum in list_lightning_curricula()])
+
+
+@router.get("/research/policies", response_model=PolicyCatalogResponse)
+def research_policies() -> PolicyCatalogResponse:
+    return PolicyCatalogResponse(policies=[_policy_item(policy) for policy in list_reasoning_policies()])
 
 
 @router.get("/research/presets", response_model=PresetCatalogResponse)
@@ -183,6 +206,49 @@ def rollout_dataset(request: DatasetRolloutRequest) -> DatasetRolloutResponse:
         report=report,
         task_ids=[trace.task_id for trace in traces],
     )
+
+
+@router.post("/research/optimize/dataset-policy", response_model=PolicyOptimizationResponse)
+def optimize_dataset_policy_route(request: DatasetPolicyOptimizationRequest) -> PolicyOptimizationResponse:
+    try:
+        optimization = optimize_dataset_policy(
+            request.dataset_key,
+            ARTIFACTS_ROOT,
+            subset=request.subset,
+            train_limit=request.train_limit,
+            validation_limit=request.validation_limit,
+            train_split=request.train_split,
+            validation_split=request.validation_split,
+            settings=get_settings(),
+            prompt_version=request.prompt_version,
+            baseline_policy_version=request.baseline_policy_version,
+            candidate_policy_versions=request.candidate_policy_versions or None,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Dataset policy optimization failed: {exc}") from exc
+    return PolicyOptimizationResponse(optimization=optimization)
+
+
+@router.post("/research/optimize/curriculum-policy", response_model=PolicyOptimizationResponse)
+def optimize_curriculum_policy_route(request: CurriculumPolicyOptimizationRequest) -> PolicyOptimizationResponse:
+    try:
+        optimization = optimize_curriculum_policy(
+            request.curriculum_key,
+            ARTIFACTS_ROOT,
+            settings=get_settings(),
+            prompt_version=request.prompt_version,
+            baseline_policy_version=request.baseline_policy_version,
+            candidate_policy_versions=request.candidate_policy_versions or None,
+            train_cap_per_component=request.train_cap_per_component,
+            validation_cap_per_component=request.validation_cap_per_component,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Curriculum policy optimization failed: {exc}") from exc
+    return PolicyOptimizationResponse(optimization=optimization)
 
 
 @router.post("/research/rollout/preset", response_model=DatasetRolloutResponse)

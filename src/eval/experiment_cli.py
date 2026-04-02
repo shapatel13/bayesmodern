@@ -5,8 +5,15 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Sequence
 
+from utils.bootstrap import ensure_src_path, prefer_local_package
+
+ensure_src_path(Path(__file__).resolve().parents[1])
+prefer_local_package("datasets", Path(__file__).resolve().parents[1] / "datasets")
+
 from agent.lightning_adapter import detect_lightning_runtime
 from agent.offline_rollout import run_curriculum_offline_experiment, run_dataset_offline_experiment
+from agent.policy_optimizer import optimize_curriculum_policy, optimize_dataset_policy
+from core.policy import list_reasoning_policies
 from datasets.catalog import list_dataset_specs
 from datasets.curricula import get_lightning_curriculum, list_lightning_curricula
 from eval.experiment_registry import compare_experiment_summaries, list_experiment_summaries
@@ -26,6 +33,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("list-experiments", help="List recorded offline experiments.")
     subparsers.add_parser("list-presets", help="List named specialty benchmark presets.")
     subparsers.add_parser("list-curricula", help="List named multi-dataset Lightning feedback curricula.")
+    subparsers.add_parser("list-policies", help="List available deterministic reasoning policies for offline optimization.")
 
     rollout = subparsers.add_parser("run-dataset-rollout", help="Run an offline dataset rollout and export artifacts.")
     rollout.add_argument("dataset_key")
@@ -58,6 +66,33 @@ def build_parser() -> argparse.ArgumentParser:
     curriculum.add_argument("--validation-cap-per-component", type=int, default=None)
     curriculum.add_argument("--artifacts-root", default=str(DEFAULT_ARTIFACTS_ROOT))
 
+    optimize_dataset = subparsers.add_parser(
+        "optimize-dataset-policy",
+        help="Evaluate baseline and candidate reasoning policies on one dataset and pick the safest improver.",
+    )
+    optimize_dataset.add_argument("dataset_key")
+    optimize_dataset.add_argument("--subset", default=None)
+    optimize_dataset.add_argument("--train-limit", type=int, default=8)
+    optimize_dataset.add_argument("--validation-limit", type=int, default=4)
+    optimize_dataset.add_argument("--train-split", default=None)
+    optimize_dataset.add_argument("--validation-split", default=None)
+    optimize_dataset.add_argument("--prompt-version", default="v1-offline")
+    optimize_dataset.add_argument("--baseline-policy-version", default="v1-deterministic")
+    optimize_dataset.add_argument("--candidate-policy-version", dest="candidate_policy_versions", action="append")
+    optimize_dataset.add_argument("--artifacts-root", default=str(DEFAULT_ARTIFACTS_ROOT))
+
+    optimize_curriculum = subparsers.add_parser(
+        "optimize-curriculum-policy",
+        help="Evaluate baseline and candidate reasoning policies on a multi-dataset Lightning curriculum.",
+    )
+    optimize_curriculum.add_argument("curriculum_key")
+    optimize_curriculum.add_argument("--prompt-version", default="v1-offline")
+    optimize_curriculum.add_argument("--baseline-policy-version", default="v1-deterministic")
+    optimize_curriculum.add_argument("--candidate-policy-version", dest="candidate_policy_versions", action="append")
+    optimize_curriculum.add_argument("--train-cap-per-component", type=int, default=None)
+    optimize_curriculum.add_argument("--validation-cap-per-component", type=int, default=None)
+    optimize_curriculum.add_argument("--artifacts-root", default=str(DEFAULT_ARTIFACTS_ROOT))
+
     return parser
 
 
@@ -81,6 +116,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "presets": [preset.key for preset in list_research_presets()],
             "curriculum_count": len(list_lightning_curricula()),
             "curricula": [curriculum.key for curriculum in list_lightning_curricula()],
+            "policy_count": len(list_reasoning_policies()),
+            "policies": [policy.version for policy in list_reasoning_policies()],
             "lightning_runtime": detect_lightning_runtime(settings).model_dump(),
             "artifacts_root": str(DEFAULT_ARTIFACTS_ROOT),
         }
@@ -101,6 +138,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "list-curricula":
         payload = [asdict(curriculum) for curriculum in list_lightning_curricula()]
+        print(dumps_pretty(payload))
+        return 0
+
+    if args.command == "list-policies":
+        payload = [policy.model_dump() for policy in list_reasoning_policies()]
         print(dumps_pretty(payload))
         return 0
 
@@ -161,6 +203,37 @@ def main(argv: Sequence[str] | None = None) -> int:
             "report": report,
         }
         print(dumps_pretty(payload))
+        return 0
+
+    if args.command == "optimize-dataset-policy":
+        optimization = optimize_dataset_policy(
+            args.dataset_key,
+            artifacts_root,
+            subset=args.subset,
+            train_limit=args.train_limit,
+            validation_limit=args.validation_limit,
+            train_split=args.train_split,
+            validation_split=args.validation_split,
+            settings=settings,
+            prompt_version=args.prompt_version,
+            baseline_policy_version=args.baseline_policy_version,
+            candidate_policy_versions=args.candidate_policy_versions,
+        )
+        print(dumps_pretty(optimization.model_dump()))
+        return 0
+
+    if args.command == "optimize-curriculum-policy":
+        optimization = optimize_curriculum_policy(
+            args.curriculum_key,
+            artifacts_root,
+            settings=settings,
+            prompt_version=args.prompt_version,
+            baseline_policy_version=args.baseline_policy_version,
+            candidate_policy_versions=args.candidate_policy_versions,
+            train_cap_per_component=args.train_cap_per_component,
+            validation_cap_per_component=args.validation_cap_per_component,
+        )
+        print(dumps_pretty(optimization.model_dump()))
         return 0
 
     if args.command == "compare-experiments":

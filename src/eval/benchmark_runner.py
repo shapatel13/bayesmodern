@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from utils.bootstrap import ensure_src_path, prefer_local_package
+
+ensure_src_path(Path(__file__).resolve().parents[1])
+prefer_local_package("datasets", Path(__file__).resolve().parents[1] / "datasets")
+
 from pydantic import BaseModel, Field
 
 from agent.generation_audit import audit_generation_task
@@ -50,7 +55,7 @@ def run_benchmark(
     prompt_version: str = "v1-offline",
     policy_version: str = "v1-deterministic",
 ) -> list[ExperimentTrace]:
-    orchestrator = PRIORIXOrchestrator()
+    orchestrator = PRIORIXOrchestrator(policy_version=policy_version)
     reward_model = CompositeRewardModel()
     traces: list[ExperimentTrace] = []
     for task in tasks:
@@ -62,7 +67,7 @@ def run_benchmark(
                 TraceStep(name="validate", detail="Contradiction and citation checks"),
             ]
         else:
-            report = orchestrator.analyze_text_case(task.task_id, task.prompt)
+            report = orchestrator.analyze_text_case(task.task_id, task.prompt, policy_version=policy_version)
             trace_steps = [
                 TraceStep(name="extract", detail="Keyword-based structured extraction"),
                 TraceStep(name="differential", detail="Deterministic Bayesian differential"),

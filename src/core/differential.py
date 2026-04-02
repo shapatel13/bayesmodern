@@ -4,7 +4,7 @@ from collections.abc import Mapping
 
 import numpy as np
 
-from core.bayes import normalize_distribution
+from core.bayes import normalize_distribution, shannon_entropy
 from core.calibration import classify_calibration
 from core.likelihood_ratios import update_probability_from_evidence
 from core.models import (
@@ -14,6 +14,7 @@ from core.models import (
     DifferentialResult,
     ProbabilityInterval,
 )
+from core.policy import ReasoningPolicy, get_reasoning_policy
 from core.uncertainty import normalize_sampled_distributions, sample_lr, sample_probability
 
 
@@ -25,7 +26,11 @@ def _symptom_coverage(context: ClinicalDecisionContext, hypothesis: DiagnosisHyp
     return len(present_keys & supported) / len(present_keys)
 
 
-def _apply_explaining_away(raw_posteriors: dict[str, float], coverages: Mapping[str, float]) -> dict[str, float]:
+def _apply_explaining_away(
+    raw_posteriors: dict[str, float],
+    coverages: Mapping[str, float],
+    policy: ReasoningPolicy,
+) -> dict[str, float]:
     ranked = sorted(raw_posteriors.items(), key=lambda item: item[1], reverse=True)
     if len(ranked) < 2:
         return raw_posteriors
@@ -33,10 +38,35 @@ def _apply_explaining_away(raw_posteriors: dict[str, float], coverages: Mapping[
     adjusted = raw_posteriors.copy()
     for slug, posterior in ranked[1:]:
         overlap = min(coverages.get(top_slug, 0.0), coverages.get(slug, 0.0))
-        adjustment = max(0.8, 1.0 - (top_posterior * overlap * 0.15))
+        adjustment = max(0.7, 1.0 - (top_posterior * overlap * policy.differential.overlap_penalty_strength))
         adjusted[slug] = posterior * adjustment
     adjusted[top_slug] = max(adjusted[top_slug], top_posterior)
     return normalize_distribution(adjusted)
+
+
+def _contradiction_load(contributions: list) -> float:
+    return sum(max(0.0, 1.0 - item.applied_lr) for item in contributions if item.direction == "against")
+
+
+def _contextual_prior_multiplier(
+    context: ClinicalDecisionContext,
+    hypothesis: DiagnosisHypothesis,
+    policy: ReasoningPolicy,
+) -> float:
+    multiplier = 1.0
+    if hypothesis.dangerous and (context.hemodynamic_instability or context.critical_values_present):
+        multiplier += policy.differential.dangerous_context_boost * max(hypothesis.urgency_weight, 0.5)
+    if context.renal_impairment and hypothesis.slug == "heart_failure":
+        multiplier += 0.05
+    return multiplier
+
+
+def _coverage_multiplier(coverage: float, policy: ReasoningPolicy) -> float:
+    return 1.0 + (coverage * policy.differential.coverage_bonus_strength)
+
+
+def _contradiction_multiplier(contradiction_load: float, policy: ReasoningPolicy) -> float:
+    return 1.0 / (1.0 + (policy.differential.contradiction_penalty_strength * contradiction_load))
 
 
 def _sample_hypothesis_posterior(
@@ -65,7 +95,9 @@ class DifferentialEngine:
         hypotheses: list[DiagnosisHypothesis],
         samples: int = 500,
         seed: int = 17,
+        policy: ReasoningPolicy | str | None = None,
     ) -> DifferentialResult:
+        resolved_policy = get_reasoning_policy(policy) if isinstance(policy, str) or policy is None else policy
         findings_by_key = {finding.key: finding for finding in context.findings}
         raw_posteriors: dict[str, float] = {}
         evidence_for: dict[str, list] = {}
@@ -78,16 +110,21 @@ class DifferentialEngine:
                 findings_by_key=findings_by_key,
                 evidence_items=hypothesis.supporting_findings + hypothesis.contradicting_findings,
             )
-            raw_posteriors[hypothesis.slug] = posterior
+            coverage = _symptom_coverage(context, hypothesis)
+            adjusted_posterior = posterior
+            adjusted_posterior *= _contextual_prior_multiplier(context, hypothesis, resolved_policy)
+            adjusted_posterior *= _coverage_multiplier(coverage, resolved_policy)
+            adjusted_posterior *= _contradiction_multiplier(_contradiction_load(support), resolved_policy)
+            raw_posteriors[hypothesis.slug] = adjusted_posterior
             evidence_for[hypothesis.slug] = [item for item in support if item.direction == "for"]
             evidence_against[hypothesis.slug] = [item for item in support if item.direction == "against"]
-            coverages[hypothesis.slug] = _symptom_coverage(context, hypothesis)
+            coverages[hypothesis.slug] = coverage
 
-        normalized = _apply_explaining_away(normalize_distribution(raw_posteriors), coverages)
+        normalized = _apply_explaining_away(normalize_distribution(raw_posteriors), coverages, resolved_policy)
         rng = np.random.default_rng(seed)
         sampled = [
             {hypothesis.slug: _sample_hypothesis_posterior(context, hypothesis, rng) for hypothesis in hypotheses}
-            for _ in range(samples)
+            for _ in range(max(samples, resolved_policy.differential.sample_count))
         ]
         intervals = normalize_sampled_distributions(sampled)
 
@@ -122,7 +159,11 @@ class DifferentialEngine:
         return DifferentialResult(
             ranked=ranked_entries,
             posterior_mass_top3=sum(entry.posterior for entry in ranked_entries[:3]),
-            model_note="Hybrid deterministic Bayesian differential with Monte Carlo uncertainty and explaining-away.",
+            posterior_entropy=shannon_entropy({entry.slug: entry.posterior for entry in ranked_entries}),
+            model_note=(
+                f"Hybrid deterministic Bayesian differential with Monte Carlo uncertainty, "
+                f"explaining-away, and reasoning policy `{resolved_policy.version}`."
+            ),
         )
 
     @staticmethod

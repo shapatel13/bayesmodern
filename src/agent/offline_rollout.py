@@ -65,6 +65,7 @@ def run_offline_rollout(
         report_markdown=report,
         output_dir=artifacts_dir,
         settings=settings,
+        policy_version=policy_version,
         curriculum_key=curriculum_key,
         component_datasets=component_datasets,
         reward_profiles=_reward_profiles_for_tasks(tasks, validation_tasks),

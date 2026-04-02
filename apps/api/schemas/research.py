@@ -3,6 +3,8 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from agent.lightning_adapter import LightningRuntimeStatus
+from agent.policy_optimizer import PolicyOptimizationSummary
+from core.policy import DifferentialPolicy, NextTestPolicy, ThresholdPolicy
 from datasets.curricula import CurriculumAccessMode
 from eval.benchmark_runner import BenchmarkMetricsSummary
 from eval.experiment_registry import ExperimentComparison, ExperimentSummary, PromotionGateDecision
@@ -59,6 +61,19 @@ class LightningCurriculumItem(BaseModel):
 
 class CurriculumCatalogResponse(BaseModel):
     curricula: list[LightningCurriculumItem]
+
+
+class ReasoningPolicyItem(BaseModel):
+    version: str
+    label: str
+    description: str
+    differential: DifferentialPolicy
+    next_test: NextTestPolicy
+    thresholds: ThresholdPolicy
+
+
+class PolicyCatalogResponse(BaseModel):
+    policies: list[ReasoningPolicyItem]
 
 
 class ResearchPresetItem(BaseModel):
@@ -125,6 +140,31 @@ class CurriculumRolloutRequest(BaseModel):
     validation_cap_per_component: int = Field(default=4, ge=0, le=250)
     prompt_version: str = Field(default="v1-offline")
     policy_version: str = Field(default="v1-deterministic")
+
+
+class DatasetPolicyOptimizationRequest(BaseModel):
+    dataset_key: str
+    subset: str | None = None
+    train_limit: int = Field(default=8, ge=1, le=250)
+    validation_limit: int = Field(default=4, ge=0, le=250)
+    train_split: str | None = None
+    validation_split: str | None = None
+    prompt_version: str = Field(default="v1-offline")
+    baseline_policy_version: str = Field(default="v1-deterministic")
+    candidate_policy_versions: list[str] = Field(default_factory=list)
+
+
+class CurriculumPolicyOptimizationRequest(BaseModel):
+    curriculum_key: str
+    train_cap_per_component: int = Field(default=8, ge=1, le=250)
+    validation_cap_per_component: int = Field(default=4, ge=0, le=250)
+    prompt_version: str = Field(default="v1-offline")
+    baseline_policy_version: str = Field(default="v1-deterministic")
+    candidate_policy_versions: list[str] = Field(default_factory=list)
+
+
+class PolicyOptimizationResponse(BaseModel):
+    optimization: PolicyOptimizationSummary
 
 
 class ExperimentListResponse(BaseModel):

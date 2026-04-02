@@ -12,7 +12,7 @@ def compute_test_risk_penalty(test: CandidateTest, context: ClinicalDecisionCont
     if test.radiation > 0.3:
         reasons.append("Radiation exposure")
     if context.renal_impairment and test.nephrotoxicity > 0.1:
-        penalty += 0.4
+        penalty += 0.75
         reasons.append("Renal risk amplified by kidney impairment")
     if test.bleed_risk > 0.2:
         penalty += 0.25
@@ -22,4 +22,3 @@ def compute_test_risk_penalty(test: CandidateTest, context: ClinicalDecisionCont
         reasons.append("Already completed")
 
     return TestRiskPenalty(total_penalty=penalty, reasons=reasons)
-

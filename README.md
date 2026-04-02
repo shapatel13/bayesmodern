@@ -104,7 +104,7 @@ Current Hugging Face dataset targets:
 - `qiaojin/PubMedQA` using `pqa_labeled`
 - `findzebra/case-reports`
 
-Lightning feedback curricula can now blend these sources into a single offline training bundle for Microsoft Agent Lightning export.
+Lightning feedback curricula can now blend these sources into a single offline training bundle for Microsoft Agent Lightning export and offline policy search.
 
 Credentialed local dataset targets include:
 
@@ -121,7 +121,7 @@ The workflow is:
 1. Run benchmark cases.
 2. Collect traces, structured outputs, safety signals, and reward components.
 3. Export an Agent Lightning sandbox bundle with train/validation tasks, transitions, traces, and a baseline prompt template.
-4. Compare prompts, policies, and routing heuristics.
+4. Compare prompts, deterministic reasoning policies, and routing heuristics.
 5. Promote only candidate policies that pass safety gates.
 
 No hidden online updates are permitted.
@@ -135,14 +135,17 @@ python -m eval.benchmark_runner
 python -m eval.experiment_cli status
 python -m eval.experiment_cli list-presets
 python -m eval.experiment_cli list-curricula
+python -m eval.experiment_cli list-policies
 python -m eval.experiment_cli run-dataset-rollout medmcqa --train-limit 8 --validation-limit 4
 python -m eval.experiment_cli run-preset-rollout core_diagnostic_lab
 python -m eval.experiment_cli run-preset-rollout generation_audit_lab
 python -m eval.experiment_cli run-curriculum-rollout broad_medical_feedback_lab --train-cap-per-component 1 --validation-cap-per-component 1
+python -m eval.experiment_cli optimize-dataset-policy medmcqa --train-limit 8 --validation-limit 4
+python -m eval.experiment_cli optimize-curriculum-policy broad_medical_feedback_lab --train-cap-per-component 2 --validation-cap-per-component 1
 python -m eval.experiment_cli list-experiments
 ```
 
-The broad public curriculum is the fastest way to get MedMCQA, MedQA, PubMedQA, and FindZebra into one Lightning-compatible bundle. Use small per-component caps for a quick morning pass, then increase them for longer offline optimization runs.
+The broad public curriculum is the fastest way to get MedMCQA, MedQA, PubMedQA, and FindZebra into one Lightning-compatible bundle. Use small per-component caps for a quick morning pass, then increase them for longer offline optimization runs and policy search.
 
 If you have the PhysioNet MedVAL-Bench CSV locally, set `PRIORI_MEDVAL_BENCH_PATH` and use `generation_audit_lab` or `physician_audit_feedback_lab` to improve the verifier side of PRIORI-X. The loader partitions the single CSV deterministically and balances limited runs across MedVAL task groups.
 
@@ -153,7 +156,7 @@ powershell -ExecutionPolicy Bypass -File scripts\warmup_priori_x.ps1
 powershell -ExecutionPolicy Bypass -File scripts\start_priori_x.ps1
 ```
 
-The warmup script seeds the bundled demo presets so the Research Lab has immediate experiments available without external datasets.
+The warmup script seeds bundled smoke-test experiments so the Research Lab has immediate artifacts even before external datasets finish loading.
 
 Generated artifacts are written to `artifacts/evals`, `artifacts/traces`, and `artifacts/reports`.
 
@@ -176,11 +179,14 @@ To build a benchmark-driven rollout with an Agent Lightning sandbox bundle, use 
 - `GET /api/research/status` for dataset and Microsoft Agent Lightning runtime metadata
 - `GET /api/research/datasets` for the benchmark catalog
 - `GET /api/research/curricula` for named multi-dataset Lightning feedback curricula
+- `GET /api/research/policies` for deterministic Bayesian policy variants available to the optimizer
 - `GET /api/research/presets` for named specialty benchmark tracks
 - `POST /api/research/benchmark/dataset` for an on-demand dataset benchmark summary
 - `POST /api/research/rollout/dataset` for an artifact-producing offline rollout
 - `POST /api/research/rollout/curriculum` for a multi-dataset Lightning curriculum rollout
 - `POST /api/research/rollout/preset` for a named specialty-track rollout
+- `POST /api/research/optimize/dataset-policy` for offline policy search on a single dataset
+- `POST /api/research/optimize/curriculum-policy` for offline policy search across a Lightning curriculum
 - `GET /api/research/experiments` for recorded experiment summaries
 - `POST /api/research/experiments/compare` for before/after comparison
 
@@ -195,6 +201,7 @@ The Streamlit workbench includes:
 - calibration panel
 - research lab controls for dataset rollouts
 - Lightning feedback curriculum controls for multi-dataset Hugging Face training bundles
+- offline policy search over deterministic Bayesian policies with safety-gated promotion
 - specialty preset tracks for ED triage, medication safety, rare disease, and evidence verification
 - physician-audit preset and curriculum for MedVAL-Bench generation-risk benchmarking
 - experiment registry and comparison view
