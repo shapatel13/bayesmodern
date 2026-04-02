@@ -145,6 +145,42 @@ def main() -> None:
         "Research only. PRIORI-X is not a clinical autopilot and must not be used for autonomous "
         "patient care decisions."
     )
+    with st.expander("Quick Handbook", expanded=False):
+        st.markdown(
+            "\n".join(
+                [
+                    "**Start here if the app feels overwhelming.**",
+                    "",
+                    "1. Paste a case into `Case Intake`.",
+                    "2. Leave `Case Policy` on `v1-deterministic`.",
+                    "3. Click `Analyze Case`.",
+                    "4. Read results in this order: `Diagnostic Cockpit` -> `Next Best Test` -> `Safety & Provenance` -> `Calibration Lab`.",
+                    "5. Ignore most of `Research Lab` until you want benchmarking or prompt improvement.",
+                    "",
+                    "**Use each section like this:**",
+                    "",
+                    "- `Diagnostic Cockpit`: understand the ranked differential and uncertainty.",
+                    "- `Next Best Test`: choose the most discriminative, stewardship-aware next step.",
+                    "- `Safety & Provenance`: check urgency, contradictions, provenance, medications, and ADE signals.",
+                    "- `Calibration Lab`: compare confidence versus fragility, mainly for evaluation.",
+                    "- `Audit Trail`: inspect the full structured output and save examples for later review.",
+                    "",
+                    "**When to optimize prompts:**",
+                    "",
+                    "- after running benchmark datasets",
+                    "- after collecting reviewed misses",
+                    "- not after a single raw case",
+                    "",
+                    "**Best default improvement path:**",
+                    "",
+                    "- use the `continuous_improvement_feedback_lab` curriculum",
+                    "- add de-identified reviewed cases through `PRIORI_REVIEWED_CASES_PATH`",
+                    "- run offline prompt improvement only after review",
+                    "",
+                    "**Full handbook:** `docs/HANDBOOK.md`",
+                ]
+            )
+        )
 
     sample_case = GUIDED_DEMO_CASES["Pulmonary Embolism"]
     with st.sidebar:

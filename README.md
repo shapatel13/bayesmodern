@@ -68,6 +68,8 @@ tests/
 
 ## Quick Start
 
+For a practical operator guide with section-by-section advice, prompt-improvement workflow, and “what to use when,” see [docs/HANDBOOK.md](C:/Users/msmsh/Downloads/bayesmodern/docs/HANDBOOK.md).
+
 1. Create a Python 3.11+ environment.
 2. Install the package in editable mode.
 3. Copy `.env.example` to `.env`.
