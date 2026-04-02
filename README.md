@@ -15,11 +15,16 @@ It is designed as an inspectable medical decision-science lab:
 PRIORI-X accepts a vignette, note, or structured findings and produces:
 
 - a ranked differential diagnosis with posterior mass
+- a parallel mechanism-layer summary of overlapping latent physiological states
 - evidence for and against each hypothesis
 - next-best-test recommendations with likelihood ratios, information gain, cost, and safety tradeoffs
 - threshold-aware action framing
 - uncertainty intervals and calibration signals
 - reproducible traces for offline evaluation
+
+## Mechanism Layer
+
+PRIORI-X now includes a deterministic latent-state / mechanism layer that runs alongside the disease differential. This layer is not forced into a single diagnosis and can express mixed physiology such as venous congestion plus impaired contractility, or hemorrhagic blood loss plus low effective arterial volume. Structured observations feed both the disease-level Bayesian engine and the mechanism layer, and next-best-test ranking can incorporate mechanistic information gain in addition to disease discrimination.
 
 ## What PRIORI-X Is Not
 

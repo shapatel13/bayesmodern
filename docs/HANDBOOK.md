@@ -16,9 +16,10 @@ If you are opening PRIORI-X for normal day-to-day use, focus on only these parts
 
 1. `Case Intake`
 2. `Diagnostic Cockpit`
-3. `Next Best Test`
-4. `Safety & Provenance`
-5. `Prompt Improvement` only after you have benchmark data or reviewed cases
+3. `Mechanism Layer`
+4. `Next Best Test`
+5. `Safety & Provenance`
+6. `Prompt Improvement` only after you have benchmark data or reviewed cases
 
 You do not need to use every research control on day 1.
 
@@ -36,6 +37,7 @@ python run_priori_x.py
 5. Click `Analyze Case`.
 6. Read the answer in this order:
    - `Diagnostic Cockpit`
+   - `Mechanism Layer`
    - `Next Best Test`
    - `Safety & Provenance`
    - `Calibration Lab`
@@ -108,6 +110,29 @@ When to slow down:
 - the top few diagnoses are close together
 - the case is high-risk but the posterior is diffuse
 - the contradictions or provenance warnings are non-empty
+
+## Mechanism Layer
+
+This is the physiology and hidden-state surface.
+
+Use it to see:
+
+- overlapping latent states rather than a forced single diagnosis
+- mixed physiology such as congestion plus low forward flow
+- whether fluid responsiveness remains uncertain
+- whether bleeding, obstructive, ischemic, or medication-effect signals are dominating
+
+Best for:
+
+- cases where the disease differential remains broad
+- mixed shock or mixed cardiorenal cases
+- deciding whether the best next test should clarify physiology rather than just one diagnosis
+
+Important:
+
+- this layer complements the disease differential; it does not replace it
+- multiple mechanism states can be active at once
+- the mechanism layer is deterministic and inspectable, not prompt-first runtime reasoning
 
 ## Next Best Test
 

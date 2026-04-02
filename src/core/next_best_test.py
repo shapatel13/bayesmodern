@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from core.bayes import bayes_update, shannon_entropy
-from core.models import CandidateTest, ClinicalDecisionContext, TestRecommendation
+from core.models import CandidateTest, ClinicalDecisionContext, MechanismStateResult, TestRecommendation
 from core.policy import ReasoningPolicy, get_reasoning_policy
 from core.thresholds import DecisionThresholds
 from core.risk import compute_test_risk_penalty
@@ -98,6 +98,7 @@ class NextBestTestEngine:
         current_differential: dict[str, float],
         candidates: list[CandidateTest],
         context: ClinicalDecisionContext,
+        mechanism_result: MechanismStateResult | None = None,
         thresholds: DecisionThresholds | None = None,
         policy: ReasoningPolicy | str | None = None,
     ) -> list[TestRecommendation]:
@@ -105,8 +106,13 @@ class NextBestTestEngine:
         recommendations: list[TestRecommendation] = []
         top_diagnosis_slug = max(current_differential, key=current_differential.get) if current_differential else None
         top_diagnosis_posterior = current_differential.get(top_diagnosis_slug, 0.0) if top_diagnosis_slug else 0.0
+        mechanism_map = {
+            estimate.slug: estimate.posterior
+            for estimate in (mechanism_result.ranked if mechanism_result is not None else [])
+        }
         for test in candidates:
             note_prefix = f"{test.evidence_note} " if test.evidence_note else ""
+            mechanism_prefix = f"{test.mechanistic_note} " if test.mechanistic_note else ""
             if test.already_done or test.slug in context.completed_tests:
                 recommendations.append(
                     TestRecommendation(
@@ -115,9 +121,11 @@ class NextBestTestEngine:
                         score=0.0,
                         expected_information_gain=0.0,
                         expected_posterior_movement=0.0,
+                        mechanistic_information_gain=0.0,
                         stewardship_score=0.0,
                         disposition="already_answered",
                         discriminates_between=test.target_diagnoses,
+                        target_states=test.target_states,
                         rationale=f"{note_prefix}This test is already documented as completed.".strip(),
                         lr_plus=1.0,
                         lr_minus=1.0,
@@ -134,6 +142,9 @@ class NextBestTestEngine:
             threshold_gains: list[float] = []
             target_lrs_plus: list[float] = []
             target_lrs_minus: list[float] = []
+            mechanistic_movements: list[float] = []
+            mechanistic_entropy_gains: list[float] = []
+            mechanistic_uncertainty_signals: list[float] = []
             for diagnosis in test.target_diagnoses:
                 probability = current_differential.get(diagnosis, 0.0)
                 lr = test.diagnosis_lrs.get(diagnosis)
@@ -144,10 +155,22 @@ class NextBestTestEngine:
                 threshold_gains.append(_threshold_crossing_gain(probability, lr.positive_lr, lr.negative_lr, thresholds))
                 target_lrs_plus.append(lr.positive_lr)
                 target_lrs_minus.append(lr.negative_lr)
+            for state_slug in test.target_states:
+                probability = mechanism_map.get(state_slug, 0.0)
+                lr = test.state_lrs.get(state_slug)
+                if probability <= 0 or lr is None:
+                    continue
+                mechanistic_movements.append(_expected_posterior_movement(probability, lr.positive_lr, lr.negative_lr))
+                mechanistic_entropy_gains.append(_entropy_gain(probability, lr.positive_lr, lr.negative_lr))
+                mechanistic_uncertainty_signals.append(1.0 - min(abs(probability - 0.5) / 0.5, 1.0))
 
             info_gain = sum(movements) / max(len(movements), 1)
             entropy_gain = sum(entropy_gains) / max(len(entropy_gains), 1)
             threshold_gain = sum(threshold_gains) / max(len(threshold_gains), 1)
+            mechanistic_info_gain = (
+                (sum(mechanistic_movements) / max(len(mechanistic_movements), 1))
+                + (sum(mechanistic_entropy_gains) / max(len(mechanistic_entropy_gains), 1))
+            ) / 2.0
             discrimination_gain = _discrimination_gain(current_differential, test)
             average_lr_plus = sum(target_lrs_plus) / max(len(target_lrs_plus), 1)
             average_lr_minus = sum(target_lrs_minus) / max(len(target_lrs_minus), 1)
@@ -158,6 +181,7 @@ class NextBestTestEngine:
                 + (entropy_gain * resolved_policy.next_test.entropy_weight)
                 + (discrimination_gain * 0.05 * resolved_policy.next_test.discrimination_weight)
                 + (threshold_gain * 0.1 * resolved_policy.next_test.threshold_weight)
+                + (mechanistic_info_gain * 0.85)
             )
             urgency_bonus = 1.0 + (
                 resolved_policy.next_test.urgency_bonus_weight
@@ -177,6 +201,11 @@ class NextBestTestEngine:
                 default=0.0,
             )
             diagnosis_alignment_multiplier = 0.7 + min(target_diagnosis_posterior, 0.6)
+            mechanism_alignment_multiplier = 1.0
+            if mechanistic_uncertainty_signals:
+                mechanism_alignment_multiplier += 0.45 * (
+                    sum(mechanistic_uncertainty_signals) / len(mechanistic_uncertainty_signals)
+                )
             stewardship_score = max(
                 0.0,
                 (
@@ -185,6 +214,7 @@ class NextBestTestEngine:
                     * urgency_bonus
                     * diagnosis_focus_multiplier
                     * diagnosis_alignment_multiplier
+                    * mechanism_alignment_multiplier
                     * _contextual_test_multiplier(test, context)
                 )
                 / (
@@ -209,12 +239,14 @@ class NextBestTestEngine:
                     score=score,
                     expected_information_gain=info_gain,
                     expected_posterior_movement=max(movements) if movements else 0.0,
+                    mechanistic_information_gain=mechanistic_info_gain,
                     stewardship_score=stewardship_score,
                     disposition=disposition,
                     discriminates_between=test.target_diagnoses,
+                    target_states=test.target_states,
                     rationale=(
-                        f"{note_prefix}Expected movement {info_gain:.3f}; entropy gain {entropy_gain:.3f}; "
-                        f"threshold gain {threshold_gain:.3f}; discrimination gain {discrimination_gain:.3f}. "
+                        f"{note_prefix}{mechanism_prefix}Expected movement {info_gain:.3f}; entropy gain {entropy_gain:.3f}; "
+                        f"mechanistic gain {mechanistic_info_gain:.3f}; threshold gain {threshold_gain:.3f}; discrimination gain {discrimination_gain:.3f}. "
                         f"stewardship score {stewardship_score:.3f}. "
                         f"Risk penalties: {', '.join(risk_penalty.reasons) if risk_penalty.reasons else 'low.'}"
                     ).strip(),

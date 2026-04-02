@@ -38,7 +38,7 @@ from eval.presets import get_research_preset, list_research_presets
 from security.secrets import validate_live_llm_config
 from ui.charts.probabilities import calibration_figure, differential_figure
 from ui.components.report_cards import headline_cards
-from ui.viewmodels.cockpit import differential_rows, next_test_rows, provenance_rows
+from ui.viewmodels.cockpit import differential_rows, mechanism_rows, next_test_rows, provenance_rows
 from ui.viewmodels.research_lab import (
     benchmark_summary_cards,
     comparison_rows,
@@ -189,13 +189,14 @@ def main() -> None:
                     "1. Paste a case into `Case Intake`.",
                     "2. Leave `Case Policy` on `v1-deterministic`.",
                     "3. Click `Analyze Case`.",
-                    "4. Read results in this order: `Diagnostic Cockpit` -> `Next Best Test` -> `Safety & Provenance` -> `Calibration Lab`.",
+                    "4. Read results in this order: `Diagnostic Cockpit` -> `Mechanism Layer` -> `Next Best Test` -> `Safety & Provenance` -> `Calibration Lab`.",
                     "5. Ignore most of `Research Lab` until you want benchmarking or prompt improvement.",
                     "",
                     "**Use each section like this:**",
                     "",
                     "- `Diagnostic Cockpit`: understand the ranked differential and uncertainty.",
-                    "- `Next Best Test`: choose the most discriminative, stewardship-aware next step.",
+                    "- `Mechanism Layer`: inspect overlapping physiology and mixed-state reasoning.",
+                    "- `Next Best Test`: choose the most discriminative, stewardship-aware, and mechanistically clarifying next step.",
                     "- `Safety & Provenance`: check urgency, contradictions, provenance, medications, and ADE signals.",
                     "- `Calibration Lab`: compare confidence versus fragility, mainly for evaluation.",
                     "- `Audit Trail`: inspect the full structured output and save examples for later review.",
@@ -278,18 +279,33 @@ def main() -> None:
                 unsafe_allow_html=True,
             )
 
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(
-            ["Diagnostic Cockpit", "Next Best Test", "Safety & Provenance", "Calibration Lab", "Audit Trail"]
+        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+            ["Diagnostic Cockpit", "Mechanism Layer", "Next Best Test", "Safety & Provenance", "Calibration Lab", "Audit Trail"]
         )
         with tab1:
             left, right = st.columns([1.2, 1])
             left.plotly_chart(differential_figure(report), use_container_width=True)
             right.dataframe(pd.DataFrame(differential_rows(report)), use_container_width=True, hide_index=True)
         with tab2:
+            st.markdown(f"**Mechanism Summary:** {report.mechanism_states.summary}")
+            mechanism_left, mechanism_right = st.columns([1.1, 1])
+            mechanism_left.dataframe(
+                pd.DataFrame(mechanism_rows(report)),
+                use_container_width=True,
+                hide_index=True,
+            )
+            mechanism_right.json(
+                {
+                    "active_states": report.mechanism_states.active_states,
+                    "mixed_physiology": report.mechanism_states.mixed_physiology,
+                    "model_note": report.mechanism_states.model_note,
+                }
+            )
+        with tab3:
             st.dataframe(pd.DataFrame(next_test_rows(report)), use_container_width=True, hide_index=True)
             for recommendation in report.next_best_tests[:3]:
                 st.info(f"{recommendation.name}: {recommendation.rationale}")
-        with tab3:
+        with tab4:
             runtime_col_1, runtime_col_2, runtime_col_3, runtime_col_4 = st.columns(4)
             runtime_col_1.metric("Triage", report.triage.urgency.title())
             runtime_col_2.metric("Threshold Action", report.threshold_decision.action.replace("_", " ").title())
@@ -319,7 +335,7 @@ def main() -> None:
                 st.error("\n".join(report.contradictions))
             if report.provenance_warnings:
                 st.warning("\n".join(report.provenance_warnings))
-        with tab4:
+        with tab5:
             left, right = st.columns([1, 1])
             left.plotly_chart(calibration_figure(report), use_container_width=True)
             right.json(
@@ -327,9 +343,10 @@ def main() -> None:
                     "top_hypothesis": report.differential.ranked[0].name if report.differential.ranked else None,
                     "calibration_state": report.differential.ranked[0].calibration_state if report.differential.ranked else None,
                     "posterior_mass_top3": round(report.differential.posterior_mass_top3, 3),
+                    "top_mechanism": report.mechanism_states.ranked[0].name if report.mechanism_states.ranked else None,
                 }
             )
-        with tab5:
+        with tab6:
             st.code(json.dumps(report.model_dump(), indent=2), language="json")
 
         with st.expander("Save This Case To Reviewed Cases", expanded=False):

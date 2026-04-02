@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from core.differential import DifferentialEngine
+from core.latent_states import LatentStateEngine
 from core.next_best_test import NextBestTestEngine
 from core.policy import ReasoningPolicy, get_reasoning_policy
 from core.thresholds import DecisionCostModel, calculate_thresholds, explain_threshold_position
@@ -69,6 +70,7 @@ class PRIORIXOrchestrator:
         self.settings = settings or get_settings()
         self.policy = get_reasoning_policy(policy_version)
         self.differential_engine = DifferentialEngine()
+        self.mechanism_engine = LatentStateEngine()
         self.next_test_engine = NextBestTestEngine()
 
     def analyze_text_case(
@@ -138,6 +140,10 @@ class PRIORIXOrchestrator:
             for entry in differential.ranked
             if DISEASE_PROFILES.get(entry.slug, None) and DISEASE_PROFILES[entry.slug].dangerous
         )
+        mechanism_result = self.mechanism_engine.infer(
+            context,
+            seed=self.settings.seed,
+        )
         triage = assess_triage(dangerous_mass, context.hemodynamic_instability, context.critical_values_present)
         urgency_multiplier = 1.0
         if triage.urgency in {"urgent", "emergent"}:
@@ -164,6 +170,7 @@ class PRIORIXOrchestrator:
             posterior_map,
             candidates,
             context,
+            mechanism_result=mechanism_result,
             thresholds=thresholds,
             policy=policy,
         )[:5]
@@ -171,6 +178,7 @@ class PRIORIXOrchestrator:
         report = ResearchReport(
             context=context,
             differential=differential,
+            mechanism_states=mechanism_result,
             next_best_tests=recommendations,
             triage=triage,
             threshold_decision=threshold_decision,
@@ -192,6 +200,11 @@ class PRIORIXOrchestrator:
         report.contradictions = validate_report(report)
         report.provenance_warnings = find_missing_citations(report)
         report.differential.model_note = f"{report.differential.model_note} Triage mass {dangerous_mass:.3f}; policy `{policy.version}`."
+        if mechanism_result.ranked:
+            top_states = ", ".join(mechanism_result.active_states[:2]) or mechanism_result.summary
+            report.differential.model_note = (
+                f"{report.differential.model_note} Mechanism layer summary: {top_states}."
+            )
         if open_world_plan and (open_world_plan.hypotheses or open_world_plan.suggested_tests):
             report.differential.model_note = (
                 f"{report.differential.model_note} Open-world reasoning expanded the candidate space with "

@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from core.models import ClinicalDecisionContext, DifferentialResult, TestRecommendation, TriageAssessment
+from core.models import ClinicalDecisionContext, DifferentialResult, MechanismStateResult, TestRecommendation, TriageAssessment
 from core.thresholds import ThresholdDecision
 
 
@@ -42,6 +42,7 @@ class ReasoningRuntimeTrace(BaseModel):
 class ResearchReport(BaseModel):
     context: ClinicalDecisionContext
     differential: DifferentialResult
+    mechanism_states: MechanismStateResult = Field(default_factory=MechanismStateResult)
     next_best_tests: list[TestRecommendation]
     triage: TriageAssessment
     threshold_decision: ThresholdDecision

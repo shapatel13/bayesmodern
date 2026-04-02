@@ -22,6 +22,7 @@ def next_test_rows(report: ResearchReport) -> list[dict[str, object]]:
             "Test": recommendation.name,
             "Disposition": recommendation.disposition,
             "Info Gain": round(recommendation.expected_information_gain, 3),
+            "Mechanism Gain": round(recommendation.mechanistic_information_gain, 3),
             "Stewardship": round(recommendation.stewardship_score, 3),
             "Direct Cost": recommendation.direct_cost,
             "Downstream Cost": recommendation.downstream_cost,
@@ -33,6 +34,20 @@ def next_test_rows(report: ResearchReport) -> list[dict[str, object]]:
     ]
 
 
+def mechanism_rows(report: ResearchReport) -> list[dict[str, object]]:
+    return [
+        {
+            "Mechanism State": estimate.name,
+            "Posterior": round(estimate.posterior, 3),
+            "Interval": f"{estimate.interval_low:.2f} - {estimate.interval_high:.2f}",
+            "Confidence": estimate.confidence_state,
+            "Evidence For": len(estimate.evidence_for),
+            "Evidence Against": len(estimate.evidence_against),
+        }
+        for estimate in report.mechanism_states.ranked
+    ]
+
+
 def provenance_rows(report: ResearchReport) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for entry in report.differential.ranked:
@@ -40,6 +55,13 @@ def provenance_rows(report: ResearchReport) -> list[dict[str, str]]:
             {
                 "Artifact": entry.name,
                 "Badges": ", ".join(entry.provenance_badges),
+            }
+        )
+    for estimate in report.mechanism_states.ranked:
+        rows.append(
+            {
+                "Artifact": estimate.name,
+                "Badges": ", ".join(estimate.provenance_badges),
             }
         )
     for recommendation in report.next_best_tests:

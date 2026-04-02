@@ -17,6 +17,7 @@ class ClinicalFinding(BaseModel):
     value: float | None = None
     units: str | None = None
     note: str | None = None
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     source_type: SourceType = "user_supplied"
 
 
@@ -81,11 +82,45 @@ class DifferentialResult(BaseModel):
     model_note: str
 
 
+class LatentStateDefinition(BaseModel):
+    slug: str
+    name: str
+    category: str
+    prior: float = Field(gt=0, lt=1)
+    supporting_findings: list[HypothesisEvidence] = Field(default_factory=list)
+    contradicting_findings: list[HypothesisEvidence] = Field(default_factory=list)
+    description: str = ""
+
+
+class MechanismStateEstimate(BaseModel):
+    slug: str
+    name: str
+    category: str
+    prior: float
+    posterior: float
+    interval_low: float
+    interval_high: float
+    evidence_for: list[FindingContribution]
+    evidence_against: list[FindingContribution]
+    confidence_state: CalibrationState
+    provenance_badges: list[str] = Field(default_factory=list)
+
+
+class MechanismStateResult(BaseModel):
+    ranked: list[MechanismStateEstimate] = Field(default_factory=list)
+    active_states: list[str] = Field(default_factory=list)
+    mixed_physiology: bool = False
+    summary: str = "Mechanism layer unavailable."
+    model_note: str = ""
+
+
 class CandidateTest(BaseModel):
     slug: str
     name: str
     target_diagnoses: list[str]
     diagnosis_lrs: dict[str, LikelihoodRatioRange]
+    target_states: list[str] = Field(default_factory=list)
+    state_lrs: dict[str, LikelihoodRatioRange] = Field(default_factory=dict)
     direct_cost: float = Field(ge=0)
     downstream_cost: float = Field(ge=0, default=0)
     invasiveness: float = Field(ge=0, le=1, default=0)
@@ -98,6 +133,7 @@ class CandidateTest(BaseModel):
     bedside: bool = False
     already_done: bool = False
     evidence_note: str | None = None
+    mechanistic_note: str | None = None
     provenance_refs: list[str] = Field(default_factory=list)
     source_type: SourceType = "hard_coded"
 
@@ -108,9 +144,11 @@ class TestRecommendation(BaseModel):
     score: float
     expected_information_gain: float
     expected_posterior_movement: float
+    mechanistic_information_gain: float = 0.0
     stewardship_score: float
     disposition: Literal["worth_it_now", "defer", "unnecessary", "already_answered"]
     discriminates_between: list[str]
+    target_states: list[str] = Field(default_factory=list)
     rationale: str
     lr_plus: float
     lr_minus: float
