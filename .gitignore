@@ -21,5 +21,9 @@ tmp/
 *.log
 artifacts/models/*
 !artifacts/models/.gitkeep
+!artifacts/models/prompt_registry.seed.json
 artifacts/evals/experiments/*
 !artifacts/evals/experiments/.gitkeep
+artifacts/reviewed_cases/*
+!artifacts/reviewed_cases/.gitkeep
+!artifacts/reviewed_cases/reviewed_cases.template.jsonl

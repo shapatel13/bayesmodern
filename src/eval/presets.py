@@ -14,7 +14,7 @@ class ResearchPreset:
     train_limit: int
     validation_limit: int
     subset: str | None = None
-    prompt_version: str = "v1-offline"
+    prompt_version: str = "active"
     policy_version: str = "v1-deterministic"
     requires_credentials: bool = False
     notes: str = ""

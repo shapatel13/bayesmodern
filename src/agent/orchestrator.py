@@ -22,8 +22,20 @@ class PRIORIXOrchestrator:
         self.differential_engine = DifferentialEngine()
         self.next_test_engine = NextBestTestEngine()
 
-    def analyze_text_case(self, case_id: str, note_text: str, *, policy_version: str | None = None) -> ResearchReport:
-        context = extract_context_from_text(case_id=case_id, note_text=note_text, settings=self.settings)
+    def analyze_text_case(
+        self,
+        case_id: str,
+        note_text: str,
+        *,
+        policy_version: str | None = None,
+        prompt_template: str | None = None,
+    ) -> ResearchReport:
+        context = extract_context_from_text(
+            case_id=case_id,
+            note_text=note_text,
+            settings=self.settings,
+            prompt_template=prompt_template,
+        )
         return self.analyze_context(context, policy_version=policy_version)
 
     def analyze_context(self, context, *, policy_version: str | None = None) -> ResearchReport:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import subprocess
 from dataclasses import dataclass
 from importlib import import_module
 from importlib.metadata import PackageNotFoundError, version
@@ -12,6 +13,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from agent.orchestrator import PRIORIXOrchestrator
+from agent.prompt_registry import render_task_prompt, resolve_prompt_record
 from agent.reward_model import CompositeRewardModel
 from agent.trace_schema import ExperimentTrace, LightningTransition
 from priorix_tasks.common import BenchmarkTask
@@ -28,6 +30,7 @@ class LightningRuntimeStatus(BaseModel):
     package_version: str | None = None
     platform_supported: bool
     native_training_ready: bool
+    wsl_distribution_installed: bool | None = None
     reason: str
 
 
@@ -41,6 +44,7 @@ class LightningBundleManifest(BaseModel):
     traces_path: str
     report_path: str
     prompt_template_baseline: str
+    prompt_version: str = "v1-offline"
     baseline_policy_version: str = "v1-deterministic"
     curriculum_key: str | None = None
     component_datasets: list[str] = Field(default_factory=list)
@@ -59,6 +63,24 @@ def _running_in_wsl() -> bool:
     return bool(os.environ.get("WSL_INTEROP") or os.environ.get("WSL_DISTRO_NAME"))
 
 
+def _windows_wsl_distribution_installed() -> bool | None:
+    if sys.platform != "win32" or _running_in_wsl():
+        return None
+    try:
+        result = subprocess.run(
+            ["wsl.exe", "--list", "--quiet"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except Exception:
+        return None
+    if result.returncode != 0:
+        return False
+    return bool(result.stdout.strip())
+
+
 def _agentlightning_version() -> str | None:
     try:
         return version("agentlightning")
@@ -71,11 +93,17 @@ def detect_lightning_runtime(settings: Settings | None = None) -> LightningRunti
     package_version = _agentlightning_version()
     package_available = package_version is not None
     platform_supported = sys.platform != "win32" or _running_in_wsl()
+    wsl_distribution_installed = _windows_wsl_distribution_installed()
     llm_ready = settings.allow_live_llm and bool(settings.openai_api_key)
     native_training_ready = package_available and platform_supported and llm_ready
 
     if not package_available:
         reason = "Microsoft Agent Lightning package not installed; exporting sandbox bundle only."
+    elif sys.platform == "win32" and not _running_in_wsl() and wsl_distribution_installed is False:
+        reason = (
+            "Native Microsoft Agent Lightning training requires Linux or WSL2, but no WSL distro is installed. "
+            "Install Ubuntu with `wsl --install Ubuntu`, then rerun training inside WSL."
+        )
     elif not platform_supported:
         reason = "Native Microsoft Agent Lightning training should run on Linux or WSL2; exporting sandbox bundle only."
     elif not llm_ready:
@@ -89,6 +117,7 @@ def detect_lightning_runtime(settings: Settings | None = None) -> LightningRunti
         package_version=package_version,
         platform_supported=platform_supported,
         native_training_ready=native_training_ready,
+        wsl_distribution_installed=wsl_distribution_installed,
         reason=reason,
     )
 
@@ -156,14 +185,6 @@ def export_benchmark_tasks_jsonl(tasks: list[BenchmarkTask], output_path: Path) 
     output_path.write_text(payload, encoding="utf-8")
 
 
-def baseline_prompt_template() -> str:
-    return (
-        "You are PRIORI-X, a clinician-facing research workbench operating strictly in offline evaluation mode.\n"
-        "Analyze the following benchmark vignette conservatively, preserve uncertainty, and avoid treatment autopilot.\n\n"
-        "Case:\n{task}"
-    )
-
-
 def render_prompt_template(prompt_template: Any, task_prompt: str) -> str:
     if hasattr(prompt_template, "format"):
         try:
@@ -171,9 +192,7 @@ def render_prompt_template(prompt_template: Any, task_prompt: str) -> str:
         except TypeError:
             pass
     template_text = str(prompt_template)
-    if "{task}" in template_text:
-        return template_text.format(task=task_prompt)
-    return f"{template_text}\n\nCase:\n{task_prompt}".strip()
+    return render_task_prompt(template_text, task_prompt)
 
 
 def export_lightning_bundle(
@@ -184,6 +203,7 @@ def export_lightning_bundle(
     report_markdown: str,
     output_dir: Path,
     settings: Settings | None = None,
+    prompt_version: str = "active",
     policy_version: str = "v1-deterministic",
     curriculum_key: str | None = None,
     component_datasets: list[str] | None = None,
@@ -199,6 +219,7 @@ def export_lightning_bundle(
     traces_path = output_dir / "lightning_traces.json"
     report_path = output_dir / "lightning_report.md"
     manifest_path = output_dir / "lightning_bundle_manifest.json"
+    prompt_record = resolve_prompt_record(prompt_version)
 
     export_benchmark_tasks_jsonl(train_tasks, train_path)
     export_benchmark_tasks_jsonl(validation_tasks, validation_path)
@@ -227,7 +248,8 @@ def export_lightning_bundle(
         transitions_path=str(transitions_path),
         traces_path=str(traces_path),
         report_path=str(report_path),
-        prompt_template_baseline=baseline_prompt_template(),
+        prompt_template_baseline=prompt_record.template,
+        prompt_version=prompt_record.version,
         baseline_policy_version=policy_version,
         curriculum_key=curriculum_key,
         component_datasets=component_datasets or [],
@@ -242,13 +264,17 @@ def _import_agentlightning() -> Any:
     return import_module("agentlightning")
 
 
-def create_lightning_rollout_agent(settings: Settings | None = None) -> Any:
+def create_lightning_rollout_agent(
+    settings: Settings | None = None,
+    *,
+    policy_version: str = "v1-deterministic",
+) -> Any:
     settings = settings or get_settings()
     agl = _import_agentlightning()
     reward_model = CompositeRewardModel()
 
     @agl.rollout
-    def priori_x_prompt_rollout(task: BenchmarkTask, prompt_template: Any, policy_version: str = "v1-deterministic") -> float:
+    def priori_x_prompt_rollout(task: BenchmarkTask, prompt_template: Any) -> float:
         orchestrator = PRIORIXOrchestrator(settings=settings, policy_version=policy_version)
         rendered_prompt = render_prompt_template(prompt_template, task.prompt)
         if hasattr(agl, "emit_object"):
@@ -260,13 +286,19 @@ def create_lightning_rollout_agent(settings: Settings | None = None) -> Any:
                     "policy_version": policy_version,
                 }
             )
-        report = orchestrator.analyze_text_case(task.task_id, rendered_prompt, policy_version=policy_version)
+        report = orchestrator.analyze_text_case(
+            task.task_id,
+            task.prompt,
+            policy_version=policy_version,
+            prompt_template=str(prompt_template),
+        )
         reward = reward_model.score(task, report)
         if hasattr(agl, "emit_object"):
             agl.emit_object(
                 {
                     "top_diagnosis": report.differential.ranked[0].slug if report.differential.ranked else None,
                     "recommended_test": report.next_best_tests[0].slug if report.next_best_tests else None,
+                    "rendered_prompt_preview": rendered_prompt[:200],
                     "policy_version": policy_version,
                     "failure_categories": reward.failure_categories,
                 }
@@ -281,6 +313,8 @@ def create_lightning_rollout_agent(settings: Settings | None = None) -> Any:
 def build_native_lightning_recipe(
     *,
     settings: Settings | None = None,
+    prompt_version: str = "active",
+    policy_version: str = "v1-deterministic",
     n_runners: int = 4,
 ) -> NativeLightningRecipe:
     settings = settings or get_settings()
@@ -291,12 +325,19 @@ def build_native_lightning_recipe(
     agl = _import_agentlightning()
     from openai import AsyncOpenAI
 
-    agent = create_lightning_rollout_agent(settings=settings)
-    algorithm = agl.APO(AsyncOpenAI())
+    prompt_record = resolve_prompt_record(prompt_version)
+    agent = create_lightning_rollout_agent(settings=settings, policy_version=policy_version)
+    algorithm = agl.APO(
+        AsyncOpenAI(api_key=settings.openai_api_key),
+        gradient_model=settings.openai_reasoning_model,
+        apply_edit_model=settings.openai_verifier_model,
+    )
     trainer = agl.Trainer(
         algorithm=algorithm,
         n_runners=n_runners,
-        initial_resources={"prompt_template": baseline_prompt_template(), "policy_version": "v1-deterministic"},
+        initial_resources={
+            "prompt_template": agl.PromptTemplate(template=prompt_record.template, engine="f-string"),
+        },
         adapter=agl.TraceToMessages(),
     )
     return NativeLightningRecipe(agent=agent, trainer=trainer, runtime=runtime)

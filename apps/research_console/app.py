@@ -17,8 +17,10 @@ import pandas as pd
 import streamlit as st
 
 from agent.lightning_adapter import detect_lightning_runtime
+from agent.lightning_train import train_curriculum_prompt
 from agent.offline_rollout import run_curriculum_offline_experiment, run_dataset_offline_experiment
 from agent.orchestrator import PRIORIXOrchestrator
+from agent.prompt_registry import get_active_prompt_record, list_prompt_records
 from agent.policy_optimizer import optimize_curriculum_policy, optimize_dataset_policy
 from core.policy import list_reasoning_policies
 from datasets.catalog import get_dataset_spec, list_dataset_specs
@@ -83,6 +85,8 @@ def main() -> None:
     orchestrator = PRIORIXOrchestrator(settings)
     dataset_specs = list_dataset_specs()
     lightning_curricula = list_lightning_curricula()
+    active_prompt = get_active_prompt_record()
+    prompt_records = list_prompt_records()
     research_presets = list_research_presets()
     experiment_summaries = list_experiment_summaries(EXPERIMENTS_ROOT)
     api_base_url = os.environ.get("PRIORI_API_BASE_URL")
@@ -153,6 +157,7 @@ def main() -> None:
             f"- OpenAI reasoner: `{settings.openai_reasoning_model}`",
             f"- Provider ready: `{secret_status.provider_ready}`",
             f"- Microsoft Agent Lightning: `{lightning_runtime.mode}`",
+            f"- Active prompt: `{active_prompt.version}`",
             f"- Trace redaction: `{settings.redact_traces}`",
             f"- Namespace: `{settings.experiment_namespace}`",
         ]
@@ -248,7 +253,7 @@ def main() -> None:
     research_metrics[1].metric("Preset Tracks", len(research_presets))
     research_metrics[2].metric("Lightning Curricula", len(lightning_curricula))
     research_metrics[3].metric("Experiments", len(experiment_summaries))
-    research_metrics[4].metric("Lightning Mode", lightning_runtime.mode.replace("_", " ").title())
+    research_metrics[4].metric("Tracked Prompts", len(prompt_records))
     research_metrics[5].metric("Native Training Ready", "Yes" if lightning_runtime.native_training_ready else "No")
 
     st.caption(
@@ -259,6 +264,65 @@ def main() -> None:
         "Public Hugging Face tracks like MedMCQA, MedQA, PubMedQA, and FindZebra can now be mixed into a single "
         "Lightning feedback curriculum for offline reward-bearing policy optimization."
     )
+    st.markdown("#### Prompt Improvement")
+    improvement_left, improvement_right = st.columns([1, 1.4])
+    with improvement_left:
+        st.markdown(f"**Active Prompt:** `{active_prompt.version}`")
+        st.caption(active_prompt.description)
+        if active_prompt.notes:
+            st.info(active_prompt.notes[0])
+        st.caption(
+            "Prompt updates are offline only. Raw app traffic is never trained on directly; reviewed cases must be "
+            "added to the reviewed-case dataset first."
+        )
+    with improvement_right:
+        improvement_curriculum = st.selectbox(
+            "Improvement Curriculum",
+            [curriculum.key for curriculum in lightning_curricula],
+            index=(
+                [curriculum.key for curriculum in lightning_curricula].index("continuous_improvement_feedback_lab")
+                if any(curriculum.key == "continuous_improvement_feedback_lab" for curriculum in lightning_curricula)
+                else 0
+            ),
+            key="improvement_curriculum",
+        )
+        improvement_policy = st.selectbox(
+            "Improvement Policy",
+            [policy.version for policy in policy_options],
+            index=0,
+            key="improvement_policy",
+        )
+        improvement_train_cap = st.slider("Improvement Train Cap / Component", min_value=1, max_value=32, value=8)
+        improvement_validation_cap = st.slider("Improvement Validation Cap / Component", min_value=0, max_value=16, value=4)
+        if st.button("Run Prompt Improvement", use_container_width=True):
+            with st.spinner("Running offline prompt improvement loop..."):
+                try:
+                    training_summary = train_curriculum_prompt(
+                        improvement_curriculum,
+                        EXPERIMENTS_ROOT,
+                        settings=settings,
+                        prompt_version="active",
+                        policy_version=improvement_policy,
+                        train_cap_per_component=improvement_train_cap,
+                        validation_cap_per_component=improvement_validation_cap,
+                        n_runners=1,
+                    )
+                    st.session_state["prompt_training_summary"] = training_summary.model_dump()
+                    st.session_state.pop("prompt_training_error", None)
+                except Exception as exc:
+                    st.session_state["prompt_training_error"] = str(exc)
+    if "prompt_training_error" in st.session_state:
+        st.error(st.session_state["prompt_training_error"])
+    if "prompt_training_summary" in st.session_state:
+        training_summary = st.session_state["prompt_training_summary"]
+        verdict = training_summary.get("status", "blocked")
+        if verdict == "trained_and_promoted":
+            st.success("A candidate prompt cleared the held-out promotion gate and is now active.")
+        elif verdict == "trained_and_held":
+            st.warning("Prompt training completed, but the candidate did not clear the promotion gate.")
+        elif verdict == "blocked":
+            st.info("Prompt training is configured but currently blocked on platform/runtime setup.")
+        st.json(training_summary)
 
     demo_presets = [
         preset
@@ -302,7 +366,7 @@ def main() -> None:
         )
         train_limit = st.slider("Train Cases", min_value=1, max_value=32, value=8)
         validation_limit = st.slider("Validation Cases", min_value=0, max_value=16, value=4)
-        prompt_version = st.text_input("Prompt Version", value="v1-offline")
+        prompt_version = st.text_input("Prompt Version", value="active")
         policy_version = st.selectbox(
             "Policy Version",
             [policy.version for policy in policy_options],

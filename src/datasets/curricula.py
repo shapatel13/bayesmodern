@@ -105,6 +105,38 @@ LIGHTNING_CURRICULA: dict[str, LightningCurriculumSpec] = {
         notes="Best used as a verifier-side feedback track rather than a diagnostic reasoning benchmark.",
         focus_areas=("generation safety", "hallucination detection", "risk calibration"),
     ),
+    "reviewed_cases_feedback_lab": LightningCurriculumSpec(
+        key="reviewed_cases_feedback_lab",
+        label="Reviewed Cases Feedback Lab",
+        description="Private reviewed-case curriculum for clinician-approved local improvement loops.",
+        objective="Improve prompts on your own reviewed cases without learning directly from raw app traffic.",
+        access_mode="credentialed",
+        components=(
+            CurriculumComponent("reviewed_cases", train_limit=64, validation_limit=24, weight=3),
+        ),
+        notes="Best used after cases have been de-identified and manually reviewed.",
+        focus_areas=("local error repair", "reviewed-case learning", "safe offline promotion"),
+    ),
+    "continuous_improvement_feedback_lab": LightningCurriculumSpec(
+        key="continuous_improvement_feedback_lab",
+        label="Continuous Improvement Feedback Lab",
+        description=(
+            "Hybrid curriculum that mixes public medical QA benchmarks with optional clinician-reviewed local cases."
+        ),
+        objective=(
+            "Continuously improve the active prompt offline using public QA data plus reviewed local failures."
+        ),
+        access_mode="hybrid",
+        components=(
+            CurriculumComponent("medmcqa", train_limit=24, validation_limit=12, weight=2),
+            CurriculumComponent("medqa", train_limit=24, validation_limit=12, weight=2),
+            CurriculumComponent("pubmedqa", train_limit=18, validation_limit=9, subset="pqa_labeled", weight=1),
+            CurriculumComponent("findzebra", train_limit=12, validation_limit=6, weight=1),
+            CurriculumComponent("reviewed_cases", train_limit=48, validation_limit=18, weight=3, optional=True),
+        ),
+        notes="Uses reviewed cases when available and falls back to public QA-only training otherwise.",
+        focus_areas=("prompt improvement", "reviewed-case repair", "public benchmark retention"),
+    ),
 }
 
 

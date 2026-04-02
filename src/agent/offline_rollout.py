@@ -42,7 +42,7 @@ def run_offline_rollout(
     *,
     validation_tasks: list[BenchmarkTask] | None = None,
     settings: Settings | None = None,
-    prompt_version: str = "v1-offline",
+    prompt_version: str = "active",
     policy_version: str = "v1-deterministic",
     curriculum_key: str | None = None,
     component_datasets: list[str] | None = None,
@@ -65,6 +65,7 @@ def run_offline_rollout(
         report_markdown=report,
         output_dir=artifacts_dir,
         settings=settings,
+        prompt_version=prompt_version,
         policy_version=policy_version,
         curriculum_key=curriculum_key,
         component_datasets=component_datasets,
@@ -83,7 +84,7 @@ def run_dataset_offline_rollout(
     train_split: str | None = None,
     validation_split: str | None = None,
     settings: Settings | None = None,
-    prompt_version: str = "v1-offline",
+    prompt_version: str = "active",
     policy_version: str = "v1-deterministic",
 ) -> tuple[list[ExperimentTrace], str]:
     dataset_pair = load_train_validation_tasks(
@@ -114,7 +115,7 @@ def run_dataset_offline_experiment(
     train_split: str | None = None,
     validation_split: str | None = None,
     settings: Settings | None = None,
-    prompt_version: str = "v1-offline",
+    prompt_version: str = "active",
     policy_version: str = "v1-deterministic",
 ) -> tuple[ExperimentSummary, list[ExperimentTrace], str]:
     settings = settings or get_settings()
@@ -168,7 +169,7 @@ def run_curriculum_offline_experiment(
     artifacts_root: Path,
     *,
     settings: Settings | None = None,
-    prompt_version: str = "v1-offline",
+    prompt_version: str = "active",
     policy_version: str = "v1-deterministic",
     train_cap_per_component: int | None = None,
     validation_cap_per_component: int | None = None,

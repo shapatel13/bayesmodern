@@ -10,6 +10,7 @@ prefer_local_package("datasets", Path(__file__).resolve().parents[1] / "datasets
 from pydantic import BaseModel, Field
 
 from agent.generation_audit import audit_generation_task
+from agent.prompt_registry import resolve_prompt_record
 from agent.orchestrator import PRIORIXOrchestrator
 from agent.reward_model import CompositeRewardModel
 from agent.trace_schema import ExperimentTrace, TraceStep
@@ -52,11 +53,12 @@ def run_benchmark(
     tasks: list[BenchmarkTask],
     output_dir: Path | None = None,
     *,
-    prompt_version: str = "v1-offline",
+    prompt_version: str = "active",
     policy_version: str = "v1-deterministic",
 ) -> list[ExperimentTrace]:
     orchestrator = PRIORIXOrchestrator(policy_version=policy_version)
     reward_model = CompositeRewardModel()
+    prompt_record = resolve_prompt_record(prompt_version)
     traces: list[ExperimentTrace] = []
     for task in tasks:
         if task.task_type == "generation_audit":
@@ -67,7 +69,12 @@ def run_benchmark(
                 TraceStep(name="validate", detail="Contradiction and citation checks"),
             ]
         else:
-            report = orchestrator.analyze_text_case(task.task_id, task.prompt, policy_version=policy_version)
+            report = orchestrator.analyze_text_case(
+                task.task_id,
+                task.prompt,
+                policy_version=policy_version,
+                prompt_template=prompt_record.template,
+            )
             trace_steps = [
                 TraceStep(name="extract", detail="Keyword-based structured extraction"),
                 TraceStep(name="differential", detail="Deterministic Bayesian differential"),
@@ -84,7 +91,7 @@ def run_benchmark(
                 gold_diagnosis=task.gold_diagnosis,
                 acceptable_tests=task.acceptable_tests,
                 gold_triage=task.gold_triage,
-                prompt_version=prompt_version,
+                prompt_version=prompt_record.version,
                 policy_version=policy_version,
                 model_route=report.model_route.mode,
                 steps=trace_steps,
@@ -109,7 +116,7 @@ def run_dataset_benchmark(
     subset: str | None = None,
     limit: int | None = None,
     output_dir: Path | None = None,
-    prompt_version: str = "v1-offline",
+    prompt_version: str = "active",
     policy_version: str = "v1-deterministic",
 ) -> list[ExperimentTrace]:
     tasks = load_benchmark_tasks(dataset_key, split=split, subset=subset, limit=limit)
@@ -195,9 +202,13 @@ def summarize_benchmark(traces: list[ExperimentTrace]) -> BenchmarkMetricsSummar
 def build_markdown_report(traces: list[ExperimentTrace]) -> str:
     summary = summarize_benchmark(traces)
     generation_only = bool(traces) and all(trace.task_type == "generation_audit" for trace in traces)
+    prompt_version = traces[0].prompt_version if traces else "unknown"
+    policy_version = traces[0].policy_version if traces else "unknown"
     lines = [
         "# PRIORI-X Benchmark Report",
         "",
+        f"- Prompt version: {prompt_version}",
+        f"- Policy version: {policy_version}",
         f"- Cases: {summary.cases}",
         f"- Mean reward: {summary.mean_reward:.3f}",
         f"- Unsafe recommendation rate: {summary.unsafe_recommendation_rate:.2%}",

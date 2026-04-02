@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from datasets.adapters.findzebra import normalize_findzebra_row
 from datasets.catalog import get_dataset_spec
 from datasets.loader import load_benchmark_tasks, load_curriculum_train_validation_tasks, load_train_validation_tasks
@@ -156,3 +158,30 @@ def test_curriculum_loader_respects_component_caps(monkeypatch) -> None:
 
     assert len(pair.train) == 2
     assert len(pair.validation) == 0
+
+
+def test_reviewed_cases_loader_reads_local_jsonl(tmp_path, monkeypatch) -> None:
+    from datasets import loader
+
+    reviewed_path = tmp_path / "reviewed_cases.jsonl"
+    rows = [
+        {
+            "id": f"case-{index}",
+            "task_type": "diagnosis_open",
+            "prompt": f"Clinical prompt {index}",
+            "gold_diagnosis": "pe",
+            "acceptable_tests": ["d_dimer"],
+            "review_status": "approved",
+        }
+        for index in range(20)
+    ]
+    reviewed_path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
+    monkeypatch.setattr(loader, "get_settings", lambda: Settings(_env_file=None, reviewed_cases_path=str(reviewed_path)))
+
+    pair = load_train_validation_tasks("reviewed_cases", train_limit=5, validation_limit=5)
+
+    assert pair.spec.key == "reviewed_cases"
+    assert pair.train
+    assert pair.validation
+    assert all(task.source_dataset == "reviewed_cases" for task in pair.train + pair.validation)
+    assert pair.train[0].metadata["review_status"] == "approved"

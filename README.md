@@ -125,6 +125,7 @@ Credentialed local dataset targets include:
 - `medval_bench` for physician-graded medical generation audit from a single local CSV
 - `mietic` for ED triage
 - `n2c2_2018_track2` for medication safety
+- `reviewed_cases` for your own clinician-reviewed, de-identified failure cases and gold labels
 
 ## Offline Self-Improvement
 
@@ -140,13 +141,24 @@ The workflow is:
 
 No hidden online updates are permitted.
 
-On Windows, PRIORI-X exports the Agent Lightning bundle for use in Linux or WSL2. Native Agent Lightning prompt optimization is only attempted when the `agentlightning` package is installed, the environment is Linux/WSL2, and offline-eval LLM credentials are available.
+PRIORI-X now maintains a local prompt registry. The active prompt is used by default for benchmark runs, the API, and the research console. Microsoft Agent Lightning improves that prompt offline, then PRIORI-X evaluates the candidate on held-out validation cases and only promotes it if safety and quality do not regress.
+
+The safe long-term loop is:
+
+1. use the app
+2. convert interesting failures into de-identified reviewed cases
+3. add them to `reviewed_cases`
+4. run offline prompt improvement against public QA plus reviewed cases
+5. promote only prompts that clear the held-out gate
+
+On Windows, PRIORI-X exports and evaluates everything locally, but native Agent Lightning prompt optimization still requires Linux or WSL2 with an installed distro. If `wsl --status` works but no distro is installed, the CLI and UI will now tell you explicitly to run `wsl --install Ubuntu`.
 
 ## Running Evaluations
 
 ```bash
 python -m eval.benchmark_runner
 python -m eval.experiment_cli status
+python -m eval.experiment_cli list-prompts
 python -m eval.experiment_cli list-presets
 python -m eval.experiment_cli list-curricula
 python -m eval.experiment_cli list-policies
@@ -156,12 +168,24 @@ python -m eval.experiment_cli run-preset-rollout generation_audit_lab
 python -m eval.experiment_cli run-curriculum-rollout broad_medical_feedback_lab --train-cap-per-component 1 --validation-cap-per-component 1
 python -m eval.experiment_cli optimize-dataset-policy medmcqa --train-limit 8 --validation-limit 4
 python -m eval.experiment_cli optimize-curriculum-policy broad_medical_feedback_lab --train-cap-per-component 2 --validation-cap-per-component 1
+python -m eval.experiment_cli train-curriculum-prompt continuous_improvement_feedback_lab --train-cap-per-component 8 --validation-cap-per-component 4
+python -m eval.experiment_cli auto-improve --train-cap-per-component 8 --validation-cap-per-component 4
 python -m eval.experiment_cli list-experiments
 ```
 
 The broad public curriculum is the fastest way to get MedMCQA, MedQA, PubMedQA, and FindZebra into one Lightning-compatible bundle. Use small per-component caps for a quick morning pass, then increase them for longer offline optimization runs and policy search.
 
 If you have the PhysioNet MedVAL-Bench CSV locally, set `PRIORI_MEDVAL_BENCH_PATH` and use `generation_audit_lab` or `physician_audit_feedback_lab` to improve the verifier side of PRIORI-X. The loader partitions the single CSV deterministically and balances limited runs across MedVAL task groups.
+
+If you want the app to improve from your own review work, set `PRIORI_REVIEWED_CASES_PATH` to a JSONL/JSON/CSV export matching the template in `artifacts/reviewed_cases/reviewed_cases.template.jsonl`. The `continuous_improvement_feedback_lab` curriculum will mix those reviewed cases with public QA automatically when the file is present.
+
+If native Lightning training is blocked on Windows, install a distro first:
+
+```powershell
+wsl --install Ubuntu
+```
+
+Then rerun the same `train-curriculum-prompt` or `auto-improve` command from inside WSL in the repo directory.
 
 For a Windows-first morning start, you can use either:
 
@@ -203,6 +227,7 @@ To build a benchmark-driven rollout with an Agent Lightning sandbox bundle, use 
 - `GET /api/research/datasets` for the benchmark catalog
 - `GET /api/research/curricula` for named multi-dataset Lightning feedback curricula
 - `GET /api/research/policies` for deterministic Bayesian policy variants available to the optimizer
+- `GET /api/research/prompts` for the active prompt registry
 - `GET /api/research/presets` for named specialty benchmark tracks
 - `POST /api/research/benchmark/dataset` for an on-demand dataset benchmark summary
 - `POST /api/research/rollout/dataset` for an artifact-producing offline rollout
@@ -210,6 +235,10 @@ To build a benchmark-driven rollout with an Agent Lightning sandbox bundle, use 
 - `POST /api/research/rollout/preset` for a named specialty-track rollout
 - `POST /api/research/optimize/dataset-policy` for offline policy search on a single dataset
 - `POST /api/research/optimize/curriculum-policy` for offline policy search across a Lightning curriculum
+- `POST /api/research/prompts/promote` for manual prompt promotion
+- `POST /api/research/train/dataset-prompt` for dataset-specific Lightning prompt improvement
+- `POST /api/research/train/curriculum-prompt` for curriculum-based Lightning prompt improvement
+- `POST /api/research/train/auto-improve` for the default continuous-improvement loop
 - `GET /api/research/experiments` for recorded experiment summaries
 - `POST /api/research/experiments/compare` for before/after comparison
 
@@ -225,6 +254,8 @@ The Streamlit workbench includes:
 - research lab controls for dataset rollouts
 - Lightning feedback curriculum controls for multi-dataset Hugging Face training bundles
 - offline policy search over deterministic Bayesian policies with safety-gated promotion
+- prompt registry visibility and active-prompt tracking
+- prompt-improvement controls for the continuous offline self-improvement loop
 - specialty preset tracks for ED triage, medication safety, rare disease, and evidence verification
 - physician-audit preset and curriculum for MedVAL-Bench generation-risk benchmarking
 - experiment registry and comparison view

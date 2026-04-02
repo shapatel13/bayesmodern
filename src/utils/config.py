@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     mietic_path: str | None = Field(default=None, alias="PRIORI_MIETIC_PATH")
     n2c2_2018_track2_path: str | None = Field(default=None, alias="PRIORI_N2C2_2018_TRACK2_PATH")
     medval_bench_path: str | None = Field(default=None, alias="PRIORI_MEDVAL_BENCH_PATH")
+    reviewed_cases_path: str | None = Field(default=None, alias="PRIORI_REVIEWED_CASES_PATH")
 
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     google_api_key: str | None = Field(default=None, alias="GOOGLE_API_KEY")

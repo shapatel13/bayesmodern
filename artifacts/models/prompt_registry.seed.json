@@ -1,0 +1,21 @@
+{
+  "active_version": "v1-offline",
+  "prompts": [
+    {
+      "version": "v1-offline",
+      "label": "Baseline Offline Research Prompt",
+      "description": "Conservative baseline prompt template for offline PRIORI-X benchmark parsing and reasoning.",
+      "template": "You are PRIORI-X, a clinician-facing research workbench operating strictly in offline evaluation mode.\nAnalyze the following benchmark vignette conservatively, preserve uncertainty, cite limitations when appropriate, and avoid treatment autopilot.\n\nCase:\n{task}",
+      "source": "seed",
+      "status": "active",
+      "created_at": "2026-04-02T00:00:00+00:00",
+      "based_on_version": null,
+      "resources_id": null,
+      "experiment_id": null,
+      "notes": [
+        "Seed prompt shipped with the repository.",
+        "Use as the baseline for Agent Lightning APO prompt optimization."
+      ]
+    }
+  ]
+}

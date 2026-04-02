@@ -241,7 +241,7 @@ def optimize_dataset_policy(
     train_split: str | None = None,
     validation_split: str | None = None,
     settings: Settings | None = None,
-    prompt_version: str = "v1-offline",
+    prompt_version: str = "active",
     baseline_policy_version: str = "v1-deterministic",
     candidate_policy_versions: list[str] | None = None,
 ) -> PolicyOptimizationSummary:
@@ -276,7 +276,7 @@ def optimize_curriculum_policy(
     artifacts_root: Path,
     *,
     settings: Settings | None = None,
-    prompt_version: str = "v1-offline",
+    prompt_version: str = "active",
     baseline_policy_version: str = "v1-deterministic",
     candidate_policy_versions: list[str] | None = None,
     train_cap_per_component: int | None = None,

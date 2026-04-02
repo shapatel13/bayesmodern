@@ -181,6 +181,7 @@ def test_export_lightning_bundle_writes_machine_readable_files(tmp_path: Path, m
     manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest_payload["runtime"]["mode"] == "export_only"
     assert manifest_payload["baseline_policy_version"] == "v1-deterministic"
+    assert manifest_payload["prompt_version"] == "v1-offline"
     assert manifest.train_tasks_path.endswith("lightning_train_tasks.jsonl")
 
 

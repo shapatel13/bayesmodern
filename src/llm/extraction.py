@@ -93,14 +93,25 @@ def _merge_contexts(primary: ClinicalDecisionContext, fallback: ClinicalDecision
     )
 
 
-def extract_context_from_text(case_id: str, note_text: str, settings: Settings | None = None) -> ClinicalDecisionContext:
+def extract_context_from_text(
+    case_id: str,
+    note_text: str,
+    settings: Settings | None = None,
+    *,
+    prompt_template: str | None = None,
+) -> ClinicalDecisionContext:
     keyword_context = _keyword_extract_context(case_id=case_id, note_text=note_text)
     if settings is None:
         return keyword_context
     if not settings.allow_live_llm or settings.default_model_provider != "openai" or not settings.openai_api_key:
         return keyword_context
     try:
-        openai_context = extract_context_with_openai(case_id=case_id, note_text=note_text, settings=settings)
+        openai_context = extract_context_with_openai(
+            case_id=case_id,
+            note_text=note_text,
+            settings=settings,
+            prompt_template=prompt_template,
+        )
         return _merge_contexts(primary=openai_context, fallback=keyword_context)
     except Exception as exc:
         logger.warning("OpenAI parsing failed; falling back to keyword extraction: %s", exc)

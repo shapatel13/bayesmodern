@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from agent.lightning_adapter import LightningRuntimeStatus
+from agent.lightning_train import PromptTrainingSummary
 from agent.policy_optimizer import PolicyOptimizationSummary
 from eval.benchmark_runner import BenchmarkMetricsSummary
 from eval.experiment_cli import main
@@ -131,3 +132,40 @@ def test_experiment_cli_optimize_dataset_policy(monkeypatch, capsys) -> None:
     captured = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert captured["selected_policy_version"] == "v1-balanced-bayesian"
+
+
+def test_experiment_cli_lists_prompts(capsys) -> None:
+    exit_code = main(["list-prompts"])
+
+    captured = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert captured["active_prompt"]["version"] == "v1-offline"
+
+
+def test_experiment_cli_auto_improve(monkeypatch, capsys) -> None:
+    from eval import experiment_cli
+
+    monkeypatch.setattr(
+        experiment_cli,
+        "auto_improve_prompt",
+        lambda *args, **kwargs: PromptTrainingSummary(
+            training_id="train_1",
+            created_at="2026-04-02T12:00:00+00:00",
+            objective_kind="curriculum",
+            objective_key="continuous_improvement_feedback_lab",
+            artifact_dir="artifacts/evals/experiments/train_1",
+            status="blocked",
+            baseline_prompt_version="v1-offline",
+            selected_prompt_version="v1-offline",
+            policy_version="v1-deterministic",
+            baseline_experiment_id="exp_baseline",
+            lightning_runtime_mode="export_only",
+            notes=["Install Ubuntu in WSL before native training."],
+        ),
+    )
+
+    exit_code = main(["auto-improve"])
+
+    captured = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert captured["status"] == "blocked"

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from core.models import ClinicalDecisionContext, ClinicalFinding
+from agent.prompt_registry import render_task_prompt
 from llm.openai_client import build_openai_client
 from utils.config import Settings
 
@@ -32,9 +33,16 @@ class OpenAIParsedContext(BaseModel):
     parser_notes: list[str] = Field(default_factory=list)
 
 
-def extract_context_with_openai(case_id: str, note_text: str, settings: Settings) -> ClinicalDecisionContext:
+def extract_context_with_openai(
+    case_id: str,
+    note_text: str,
+    settings: Settings,
+    *,
+    prompt_template: str | None = None,
+) -> ClinicalDecisionContext:
     client = build_openai_client(settings)
     finding_inventory = ", ".join(f"{key}: {label}" for key, label in SUPPORTED_FINDINGS.items())
+    parser_prompt = render_task_prompt(prompt_template, note_text) if prompt_template else note_text
     parsed = client.responses.parse(
         model=settings.openai_parser_model,
         reasoning={"effort": "low"},
@@ -53,7 +61,7 @@ def extract_context_with_openai(case_id: str, note_text: str, settings: Settings
                 "role": "user",
                 "content": (
                     f"Supported findings: {finding_inventory}\n\n"
-                    f"Clinical note:\n{note_text}"
+                    f"Clinical note:\n{parser_prompt}"
                 ),
             },
         ],

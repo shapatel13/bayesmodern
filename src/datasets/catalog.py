@@ -11,6 +11,7 @@ from datasets.adapters.medval_bench import normalize_medval_bench_row
 from datasets.adapters.mietic import normalize_mietic_row
 from datasets.adapters.n2c2_2018_track2 import normalize_n2c2_2018_track2_row
 from datasets.adapters.pubmedqa import normalize_pubmedqa_row
+from datasets.adapters.reviewed_cases import normalize_reviewed_case_row
 from priorix_tasks.common import BenchmarkTask
 
 
@@ -214,6 +215,32 @@ DATASET_SPECS: dict[str, BenchmarkDatasetSpec] = {
         single_file_split=True,
         split_id_field="id",
         balance_field="task",
+    ),
+    "reviewed_cases": BenchmarkDatasetSpec(
+        key="reviewed_cases",
+        hf_dataset=None,
+        adapter=normalize_reviewed_case_row,
+        access_mode="local",
+        default_train_split="train",
+        default_val_split="validation",
+        default_eval_split="test",
+        description="Manually reviewed clinician research cases for private offline self-improvement.",
+        task_family="mixed_feedback",
+        notes=(
+            "Point PRIORI_REVIEWED_CASES_PATH at a local JSONL/JSON/CSV export or use the tracked template in "
+            "artifacts/reviewed_cases. Rows are deterministically partitioned into train/validation/test."
+        ),
+        local_path_env="PRIORI_REVIEWED_CASES_PATH",
+        local_path_setting="reviewed_cases_path",
+        local_repo_relative_dir="artifacts/reviewed_cases",
+        local_split_filenames={
+            "train": ("reviewed_cases.jsonl", "reviewed_cases.json", "reviewed_cases.csv", "reviewed_cases.template.jsonl"),
+            "validation": ("reviewed_cases.jsonl", "reviewed_cases.json", "reviewed_cases.csv", "reviewed_cases.template.jsonl"),
+            "test": ("reviewed_cases.jsonl", "reviewed_cases.json", "reviewed_cases.csv", "reviewed_cases.template.jsonl"),
+        },
+        single_file_split=True,
+        split_id_field="id",
+        balance_field="task_type",
     ),
 }
 

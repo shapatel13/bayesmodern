@@ -3,6 +3,8 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from agent.lightning_adapter import LightningRuntimeStatus
+from agent.lightning_train import PromptTrainingSummary
+from agent.prompt_registry import PromptRecord
 from agent.policy_optimizer import PolicyOptimizationSummary
 from core.policy import DifferentialPolicy, NextTestPolicy, ThresholdPolicy
 from datasets.curricula import CurriculumAccessMode
@@ -29,6 +31,7 @@ class ResearchStatusResponse(BaseModel):
     artifacts_root: str
     dataset_count: int
     curriculum_count: int
+    active_prompt_version: str
     lightning_runtime: LightningRuntimeStatus
 
 
@@ -76,6 +79,11 @@ class PolicyCatalogResponse(BaseModel):
     policies: list[ReasoningPolicyItem]
 
 
+class PromptCatalogResponse(BaseModel):
+    active_prompt: PromptRecord
+    prompts: list[PromptRecord]
+
+
 class ResearchPresetItem(BaseModel):
     key: str
     label: str
@@ -101,7 +109,7 @@ class DatasetBenchmarkRequest(BaseModel):
     split: str | None = Field(default=None, description="Override the default evaluation split.")
     subset: str | None = Field(default=None, description="Optional HF subset/config name.")
     limit: int = Field(default=5, ge=1, le=100, description="Maximum benchmark tasks to evaluate.")
-    prompt_version: str = Field(default="v1-offline")
+    prompt_version: str = Field(default="active")
     policy_version: str = Field(default="v1-deterministic")
 
 
@@ -120,7 +128,7 @@ class DatasetRolloutRequest(BaseModel):
     validation_limit: int = Field(default=4, ge=0, le=250)
     train_split: str | None = None
     validation_split: str | None = None
-    prompt_version: str = Field(default="v1-offline")
+    prompt_version: str = Field(default="active")
     policy_version: str = Field(default="v1-deterministic")
 
 
@@ -138,7 +146,7 @@ class CurriculumRolloutRequest(BaseModel):
     curriculum_key: str
     train_cap_per_component: int = Field(default=8, ge=1, le=250)
     validation_cap_per_component: int = Field(default=4, ge=0, le=250)
-    prompt_version: str = Field(default="v1-offline")
+    prompt_version: str = Field(default="active")
     policy_version: str = Field(default="v1-deterministic")
 
 
@@ -149,7 +157,7 @@ class DatasetPolicyOptimizationRequest(BaseModel):
     validation_limit: int = Field(default=4, ge=0, le=250)
     train_split: str | None = None
     validation_split: str | None = None
-    prompt_version: str = Field(default="v1-offline")
+    prompt_version: str = Field(default="active")
     baseline_policy_version: str = Field(default="v1-deterministic")
     candidate_policy_versions: list[str] = Field(default_factory=list)
 
@@ -158,13 +166,42 @@ class CurriculumPolicyOptimizationRequest(BaseModel):
     curriculum_key: str
     train_cap_per_component: int = Field(default=8, ge=1, le=250)
     validation_cap_per_component: int = Field(default=4, ge=0, le=250)
-    prompt_version: str = Field(default="v1-offline")
+    prompt_version: str = Field(default="active")
     baseline_policy_version: str = Field(default="v1-deterministic")
     candidate_policy_versions: list[str] = Field(default_factory=list)
 
 
 class PolicyOptimizationResponse(BaseModel):
     optimization: PolicyOptimizationSummary
+
+
+class PromptPromotionRequest(BaseModel):
+    prompt_version: str
+
+
+class PromptTrainingRequest(BaseModel):
+    prompt_version: str = Field(default="active")
+    policy_version: str = Field(default="v1-deterministic")
+    n_runners: int = Field(default=1, ge=1, le=16)
+
+
+class DatasetPromptTrainingRequest(PromptTrainingRequest):
+    dataset_key: str
+    subset: str | None = None
+    train_limit: int = Field(default=8, ge=1, le=250)
+    validation_limit: int = Field(default=4, ge=0, le=250)
+    train_split: str | None = None
+    validation_split: str | None = None
+
+
+class CurriculumPromptTrainingRequest(PromptTrainingRequest):
+    curriculum_key: str
+    train_cap_per_component: int = Field(default=8, ge=1, le=250)
+    validation_cap_per_component: int = Field(default=4, ge=0, le=250)
+
+
+class PromptTrainingResponse(BaseModel):
+    training: PromptTrainingSummary
 
 
 class ExperimentListResponse(BaseModel):

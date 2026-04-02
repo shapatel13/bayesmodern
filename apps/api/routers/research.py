@@ -5,23 +5,30 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from agent.lightning_adapter import detect_lightning_runtime
+from agent.lightning_train import auto_improve_prompt, train_curriculum_prompt, train_dataset_prompt
+from agent.prompt_registry import get_active_prompt_record, list_prompt_records, promote_prompt_version
 from agent.offline_rollout import run_curriculum_offline_experiment, run_dataset_offline_experiment
 from agent.policy_optimizer import optimize_curriculum_policy, optimize_dataset_policy
 from apps.api.schemas.research import (
     CurriculumCatalogResponse,
     CurriculumComponentItem,
+    CurriculumPromptTrainingRequest,
     CurriculumPolicyOptimizationRequest,
     CurriculumRolloutRequest,
     DatasetBenchmarkRequest,
     DatasetBenchmarkResponse,
     DatasetCatalogItem,
     DatasetCatalogResponse,
+    DatasetPromptTrainingRequest,
     DatasetPolicyOptimizationRequest,
     DatasetRolloutRequest,
     DatasetRolloutResponse,
     ExperimentComparisonRequest,
     ExperimentComparisonResponse,
     ExperimentListResponse,
+    PromptCatalogResponse,
+    PromptPromotionRequest,
+    PromptTrainingResponse,
     PresetCatalogResponse,
     PresetRolloutRequest,
     PolicyCatalogResponse,
@@ -130,6 +137,7 @@ def research_status() -> ResearchStatusResponse:
         artifacts_root=str(ARTIFACTS_ROOT),
         dataset_count=len(list_dataset_specs()),
         curriculum_count=len(list_lightning_curricula()),
+        active_prompt_version=get_active_prompt_record().version,
         lightning_runtime=detect_lightning_runtime(settings),
     )
 
@@ -147,6 +155,14 @@ def research_curricula() -> CurriculumCatalogResponse:
 @router.get("/research/policies", response_model=PolicyCatalogResponse)
 def research_policies() -> PolicyCatalogResponse:
     return PolicyCatalogResponse(policies=[_policy_item(policy) for policy in list_reasoning_policies()])
+
+
+@router.get("/research/prompts", response_model=PromptCatalogResponse)
+def research_prompts() -> PromptCatalogResponse:
+    return PromptCatalogResponse(
+        active_prompt=get_active_prompt_record(),
+        prompts=list_prompt_records(),
+    )
 
 
 @router.get("/research/presets", response_model=PresetCatalogResponse)
@@ -249,6 +265,73 @@ def optimize_curriculum_policy_route(request: CurriculumPolicyOptimizationReques
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Curriculum policy optimization failed: {exc}") from exc
     return PolicyOptimizationResponse(optimization=optimization)
+
+
+@router.post("/research/prompts/promote", response_model=PromptCatalogResponse)
+def promote_prompt_route(request: PromptPromotionRequest) -> PromptCatalogResponse:
+    try:
+        registry = promote_prompt_version(
+            request.prompt_version,
+            notes=["Promoted manually through the research API."],
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return PromptCatalogResponse(
+        active_prompt=get_active_prompt_record(),
+        prompts=registry.prompts,
+    )
+
+
+@router.post("/research/train/dataset-prompt", response_model=PromptTrainingResponse)
+def train_dataset_prompt_route(request: DatasetPromptTrainingRequest) -> PromptTrainingResponse:
+    try:
+        training = train_dataset_prompt(
+            request.dataset_key,
+            ARTIFACTS_ROOT,
+            subset=request.subset,
+            train_limit=request.train_limit,
+            validation_limit=request.validation_limit,
+            train_split=request.train_split,
+            validation_split=request.validation_split,
+            settings=get_settings(),
+            prompt_version=request.prompt_version,
+            policy_version=request.policy_version,
+            n_runners=request.n_runners,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Dataset prompt training failed: {exc}") from exc
+    return PromptTrainingResponse(training=training)
+
+
+@router.post("/research/train/curriculum-prompt", response_model=PromptTrainingResponse)
+def train_curriculum_prompt_route(request: CurriculumPromptTrainingRequest) -> PromptTrainingResponse:
+    try:
+        training = train_curriculum_prompt(
+            request.curriculum_key,
+            ARTIFACTS_ROOT,
+            settings=get_settings(),
+            prompt_version=request.prompt_version,
+            policy_version=request.policy_version,
+            train_cap_per_component=request.train_cap_per_component,
+            validation_cap_per_component=request.validation_cap_per_component,
+            n_runners=request.n_runners,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Curriculum prompt training failed: {exc}") from exc
+    return PromptTrainingResponse(training=training)
+
+
+@router.post("/research/train/auto-improve", response_model=PromptTrainingResponse)
+def auto_improve_prompt_route() -> PromptTrainingResponse:
+    try:
+        training = auto_improve_prompt(ARTIFACTS_ROOT, settings=get_settings())
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Auto-improvement failed: {exc}") from exc
+    return PromptTrainingResponse(training=training)
 
 
 @router.post("/research/rollout/preset", response_model=DatasetRolloutResponse)
