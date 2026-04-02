@@ -60,6 +60,7 @@ def test_experiment_cli_status_prints_runtime(capsys) -> None:
     assert "lightning_runtime" in captured
     assert "medmcqa" in captured["datasets"]
     assert "core_diagnostic_lab" in captured["presets"]
+    assert "broad_medical_feedback_lab" in captured["curricula"]
 
 
 def test_experiment_cli_compare_prints_deltas(monkeypatch, capsys) -> None:
@@ -85,3 +86,11 @@ def test_experiment_cli_lists_presets(capsys) -> None:
     captured = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert any(item["key"] == "ed_triage_lab" for item in captured)
+
+
+def test_experiment_cli_lists_curricula(capsys) -> None:
+    exit_code = main(["list-curricula"])
+
+    captured = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert any(item["key"] == "broad_medical_feedback_lab" for item in captured)

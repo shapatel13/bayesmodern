@@ -103,6 +103,13 @@ def _sample_trace() -> ExperimentTrace:
         task_id="task-1",
         source_dataset="synthetic",
         task_type="diagnosis_open",
+        task_metadata={
+            "curriculum_key": "broad_medical_feedback_lab",
+            "curriculum_component": "medqa",
+            "reward_profile_hint": "diagnostic",
+            "source_hf_dataset": "augtoma/medqa_usmle",
+            "source_task_family": "diagnosis_mcq",
+        },
         gold_diagnosis="pe",
         acceptable_tests=["d_dimer"],
         gold_triage="urgent",
@@ -166,8 +173,32 @@ def test_export_lightning_bundle_writes_machine_readable_files(tmp_path: Path, m
 
     transition_lines = transitions_path.read_text(encoding="utf-8").splitlines()
     assert len(transition_lines) == 1
-    assert json.loads(transition_lines[0])["task_id"] == "task-1"
+    transition_payload = json.loads(transition_lines[0])
+    assert transition_payload["task_id"] == "task-1"
+    assert transition_payload["state"]["curriculum_key"] == "broad_medical_feedback_lab"
+    assert transition_payload["info"]["source_hf_dataset"] == "augtoma/medqa_usmle"
 
     manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest_payload["runtime"]["mode"] == "export_only"
     assert manifest.train_tasks_path.endswith("lightning_train_tasks.jsonl")
+
+
+def test_export_lightning_bundle_records_curriculum_metadata(tmp_path: Path, monkeypatch) -> None:
+    from agent import lightning_adapter
+
+    monkeypatch.setattr(lightning_adapter, "_agentlightning_version", lambda: None)
+    manifest = export_lightning_bundle(
+        train_tasks=[_sample_task()],
+        validation_tasks=[_sample_task("task-2")],
+        traces=[_sample_trace()],
+        report_markdown="# Demo",
+        output_dir=tmp_path,
+        settings=Settings(_env_file=None, allow_live_llm=False),
+        curriculum_key="broad_medical_feedback_lab",
+        component_datasets=["medmcqa", "medqa", "pubmedqa", "findzebra"],
+        reward_profiles=["diagnostic", "evidence_verification"],
+    )
+
+    assert manifest.curriculum_key == "broad_medical_feedback_lab"
+    assert manifest.component_datasets == ["medmcqa", "medqa", "pubmedqa", "findzebra"]
+    assert manifest.reward_profiles == ["diagnostic", "evidence_verification"]

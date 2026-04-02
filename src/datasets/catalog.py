@@ -53,10 +53,11 @@ DATASET_SPECS: dict[str, BenchmarkDatasetSpec] = {
         hf_dataset="augtoma/medqa_usmle",
         adapter=normalize_medqa_row,
         default_train_split="train",
-        default_val_split="validation",
+        default_val_split="test",
         default_eval_split="test",
         description="USMLE-style difficult medical QA benchmark.",
         task_family="diagnosis_mcq",
+        notes="Hugging Face export typically exposes train/test splits rather than a dedicated validation split.",
     ),
     "pubmedqa": BenchmarkDatasetSpec(
         key="pubmedqa",

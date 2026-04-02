@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 from pathlib import Path
 from typing import Sequence
 
 from agent.lightning_adapter import detect_lightning_runtime
-from agent.offline_rollout import run_dataset_offline_experiment
+from agent.offline_rollout import run_curriculum_offline_experiment, run_dataset_offline_experiment
 from datasets.catalog import list_dataset_specs
+from datasets.curricula import get_lightning_curriculum, list_lightning_curricula
 from eval.experiment_registry import compare_experiment_summaries, list_experiment_summaries
 from eval.presets import get_research_preset, list_research_presets
 from utils.config import get_settings
@@ -23,6 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("status", help="Show dataset catalog size and Microsoft Agent Lightning runtime status.")
     subparsers.add_parser("list-experiments", help="List recorded offline experiments.")
     subparsers.add_parser("list-presets", help="List named specialty benchmark presets.")
+    subparsers.add_parser("list-curricula", help="List named multi-dataset Lightning feedback curricula.")
 
     rollout = subparsers.add_parser("run-dataset-rollout", help="Run an offline dataset rollout and export artifacts.")
     rollout.add_argument("dataset_key")
@@ -43,6 +46,17 @@ def build_parser() -> argparse.ArgumentParser:
     preset = subparsers.add_parser("run-preset-rollout", help="Run an offline rollout using a named research preset.")
     preset.add_argument("preset_key")
     preset.add_argument("--artifacts-root", default=str(DEFAULT_ARTIFACTS_ROOT))
+
+    curriculum = subparsers.add_parser(
+        "run-curriculum-rollout",
+        help="Run an offline rollout using a named multi-dataset Lightning curriculum.",
+    )
+    curriculum.add_argument("curriculum_key")
+    curriculum.add_argument("--prompt-version", default="v1-offline")
+    curriculum.add_argument("--policy-version", default="v1-deterministic")
+    curriculum.add_argument("--train-cap-per-component", type=int, default=None)
+    curriculum.add_argument("--validation-cap-per-component", type=int, default=None)
+    curriculum.add_argument("--artifacts-root", default=str(DEFAULT_ARTIFACTS_ROOT))
 
     return parser
 
@@ -65,6 +79,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "datasets": [spec.key for spec in list_dataset_specs()],
             "preset_count": len(list_research_presets()),
             "presets": [preset.key for preset in list_research_presets()],
+            "curriculum_count": len(list_lightning_curricula()),
+            "curricula": [curriculum.key for curriculum in list_lightning_curricula()],
             "lightning_runtime": detect_lightning_runtime(settings).model_dump(),
             "artifacts_root": str(DEFAULT_ARTIFACTS_ROOT),
         }
@@ -80,6 +96,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "list-presets":
         payload = [preset.__dict__ for preset in list_research_presets()]
+        print(dumps_pretty(payload))
+        return 0
+
+    if args.command == "list-curricula":
+        payload = [asdict(curriculum) for curriculum in list_lightning_curricula()]
         print(dumps_pretty(payload))
         return 0
 
@@ -117,6 +138,25 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         payload = {
             "preset": preset.__dict__,
+            "experiment": experiment.model_dump(),
+            "report": report,
+        }
+        print(dumps_pretty(payload))
+        return 0
+
+    if args.command == "run-curriculum-rollout":
+        curriculum = get_lightning_curriculum(args.curriculum_key)
+        experiment, _traces, report = run_curriculum_offline_experiment(
+            args.curriculum_key,
+            artifacts_root,
+            settings=settings,
+            prompt_version=args.prompt_version,
+            policy_version=args.policy_version,
+            train_cap_per_component=args.train_cap_per_component,
+            validation_cap_per_component=args.validation_cap_per_component,
+        )
+        payload = {
+            "curriculum": asdict(curriculum),
             "experiment": experiment.model_dump(),
             "report": report,
         }

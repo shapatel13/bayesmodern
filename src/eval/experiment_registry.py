@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from agent.lightning_adapter import LightningRuntimeStatus
 from eval.benchmark_runner import BenchmarkMetricsSummary
@@ -20,12 +20,16 @@ class ExperimentSummary(BaseModel):
     created_at: str
     dataset_key: str
     dataset_hf_id: str | None = None
+    source_kind: Literal["dataset", "curriculum"] = "dataset"
     task_family: str
     subset: str | None = None
     train_split: str | None = None
     validation_split: str | None = None
     train_cases: int
     validation_cases: int
+    component_datasets: list[str] = Field(default_factory=list)
+    component_hf_ids: list[str] = Field(default_factory=list)
+    reward_profiles: list[str] = Field(default_factory=list)
     prompt_version: str
     policy_version: str
     artifact_dir: str

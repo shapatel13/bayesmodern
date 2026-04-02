@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datasets.catalog import BenchmarkDatasetSpec
+from datasets.curricula import LightningCurriculumSpec
 from eval.benchmark_runner import BenchmarkMetricsSummary
 from eval.experiment_registry import ExperimentComparison, ExperimentSummary
 from eval.presets import ResearchPreset
@@ -25,7 +26,8 @@ def experiment_rows(summaries: list[ExperimentSummary]) -> list[dict[str, object
         {
             "Experiment": summary.experiment_id,
             "Created": summary.created_at,
-            "Dataset": summary.dataset_key,
+            "Source": summary.dataset_key,
+            "Kind": summary.source_kind,
             "Task Family": summary.task_family,
             "Prompt": summary.prompt_version,
             "Policy": summary.policy_version,
@@ -141,4 +143,19 @@ def preset_rows(presets: list[ResearchPreset]) -> list[dict[str, object]]:
             "Notes": preset.notes or preset.description,
         }
         for preset in presets
+    ]
+
+
+def curriculum_rows(curricula: list[LightningCurriculumSpec]) -> list[dict[str, object]]:
+    return [
+        {
+            "Curriculum": curriculum.label,
+            "Key": curriculum.key,
+            "Access": curriculum.access_mode.replace("_", " "),
+            "Datasets": ", ".join(component.dataset_key for component in curriculum.components),
+            "Objective": curriculum.objective,
+            "Focus Areas": ", ".join(curriculum.focus_areas),
+            "Notes": curriculum.notes or curriculum.description,
+        }
+        for curriculum in curricula
     ]

@@ -103,6 +103,8 @@ Current Hugging Face dataset targets:
 - `qiaojin/PubMedQA` using `pqa_labeled`
 - `findzebra/case-reports`
 
+Lightning feedback curricula can now blend these sources into a single offline training bundle for Microsoft Agent Lightning export.
+
 ## Offline Self-Improvement
 
 Microsoft Agent Lightning integration is used as an offline adapter only.
@@ -125,10 +127,14 @@ On Windows, PRIORI-X exports the Agent Lightning bundle for use in Linux or WSL2
 python -m eval.benchmark_runner
 python -m eval.experiment_cli status
 python -m eval.experiment_cli list-presets
+python -m eval.experiment_cli list-curricula
 python -m eval.experiment_cli run-dataset-rollout medmcqa --train-limit 8 --validation-limit 4
 python -m eval.experiment_cli run-preset-rollout core_diagnostic_lab
+python -m eval.experiment_cli run-curriculum-rollout broad_medical_feedback_lab --train-cap-per-component 1 --validation-cap-per-component 1
 python -m eval.experiment_cli list-experiments
 ```
+
+The broad public curriculum is the fastest way to get MedMCQA, MedQA, PubMedQA, and FindZebra into one Lightning-compatible bundle. Use small per-component caps for a quick morning pass, then increase them for longer offline optimization runs.
 
 For a Windows-first morning start, you can use:
 
@@ -159,9 +165,11 @@ To build a benchmark-driven rollout with an Agent Lightning sandbox bundle, use 
 - `POST /api/benchmark/sample` for a sample offline benchmark sweep
 - `GET /api/research/status` for dataset and Microsoft Agent Lightning runtime metadata
 - `GET /api/research/datasets` for the benchmark catalog
+- `GET /api/research/curricula` for named multi-dataset Lightning feedback curricula
 - `GET /api/research/presets` for named specialty benchmark tracks
 - `POST /api/research/benchmark/dataset` for an on-demand dataset benchmark summary
 - `POST /api/research/rollout/dataset` for an artifact-producing offline rollout
+- `POST /api/research/rollout/curriculum` for a multi-dataset Lightning curriculum rollout
 - `POST /api/research/rollout/preset` for a named specialty-track rollout
 - `GET /api/research/experiments` for recorded experiment summaries
 - `POST /api/research/experiments/compare` for before/after comparison
@@ -176,6 +184,7 @@ The Streamlit workbench includes:
 - safety and provenance view
 - calibration panel
 - research lab controls for dataset rollouts
+- Lightning feedback curriculum controls for multi-dataset Hugging Face training bundles
 - specialty preset tracks for ED triage, medication safety, rare disease, and evidence verification
 - experiment registry and comparison view
 - promotion-gate verdicts that block unsafe prompt/policy regressions

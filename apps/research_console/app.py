@@ -7,9 +7,10 @@ import pandas as pd
 import streamlit as st
 
 from agent.lightning_adapter import detect_lightning_runtime
-from agent.offline_rollout import run_dataset_offline_experiment
+from agent.offline_rollout import run_curriculum_offline_experiment, run_dataset_offline_experiment
 from agent.orchestrator import PRIORIXOrchestrator
 from datasets.catalog import get_dataset_spec, list_dataset_specs
+from datasets.curricula import get_lightning_curriculum, list_lightning_curricula
 from eval.experiment_registry import compare_experiment_summaries, list_experiment_summaries
 from eval.presets import get_research_preset, list_research_presets
 from security.secrets import validate_live_llm_config
@@ -19,6 +20,7 @@ from ui.viewmodels.cockpit import differential_rows, next_test_rows, provenance_
 from ui.viewmodels.research_lab import (
     benchmark_summary_cards,
     comparison_rows,
+    curriculum_rows,
     dataset_catalog_rows,
     experiment_rows,
     preset_rows,
@@ -67,6 +69,7 @@ def main() -> None:
     lightning_runtime = detect_lightning_runtime(settings)
     orchestrator = PRIORIXOrchestrator(settings)
     dataset_specs = list_dataset_specs()
+    lightning_curricula = list_lightning_curricula()
     research_presets = list_research_presets()
     experiment_summaries = list_experiment_summaries(EXPERIMENTS_ROOT)
 
@@ -220,16 +223,21 @@ def main() -> None:
 
     st.divider()
     st.subheader("Research Lab")
-    research_metrics = st.columns(5)
+    research_metrics = st.columns(6)
     research_metrics[0].metric("Datasets", len(dataset_specs))
     research_metrics[1].metric("Preset Tracks", len(research_presets))
-    research_metrics[2].metric("Experiments", len(experiment_summaries))
-    research_metrics[3].metric("Lightning Mode", lightning_runtime.mode.replace("_", " ").title())
-    research_metrics[4].metric("Native Training Ready", "Yes" if lightning_runtime.native_training_ready else "No")
+    research_metrics[2].metric("Lightning Curricula", len(lightning_curricula))
+    research_metrics[3].metric("Experiments", len(experiment_summaries))
+    research_metrics[4].metric("Lightning Mode", lightning_runtime.mode.replace("_", " ").title())
+    research_metrics[5].metric("Native Training Ready", "Yes" if lightning_runtime.native_training_ready else "No")
 
     st.caption(
         "Offline benchmark runs export Microsoft Agent Lightning-compatible traces and transitions. "
         "No live patient traffic is used for self-improvement."
+    )
+    st.info(
+        "Public Hugging Face tracks like MedMCQA, MedQA, PubMedQA, and FindZebra can now be mixed into a single "
+        "Lightning feedback curriculum for offline reward-bearing optimization."
     )
 
     demo_presets = [
@@ -347,6 +355,63 @@ def main() -> None:
     with catalog_col:
         st.markdown("#### Dataset Catalog")
         st.dataframe(pd.DataFrame(dataset_catalog_rows(dataset_specs)), use_container_width=True, hide_index=True)
+
+    st.markdown("#### Lightning Feedback Curricula")
+    curriculum_col, curriculum_table_col = st.columns([1, 1.4])
+    with curriculum_col:
+        selected_curriculum_key = st.selectbox(
+            "Lightning Curriculum",
+            [curriculum.key for curriculum in lightning_curricula],
+            key="lightning_curriculum",
+        )
+        selected_curriculum = get_lightning_curriculum(selected_curriculum_key)
+        curriculum_train_cap = st.number_input(
+            "Train Cap Per Dataset",
+            min_value=1,
+            max_value=64,
+            value=8,
+            step=1,
+            help="Use a smaller cap for a faster public-HF curriculum pass.",
+        )
+        curriculum_validation_cap = st.number_input(
+            "Validation Cap Per Dataset",
+            min_value=0,
+            max_value=32,
+            value=4,
+            step=1,
+            help="Set to 0 to skip validation export if you only want a quick training bundle.",
+        )
+        st.markdown(f"**{selected_curriculum.label}**")
+        st.caption(selected_curriculum.description)
+        st.markdown(
+            "\n".join(
+                [
+                    f"- Access: `{selected_curriculum.access_mode}`",
+                    f"- Objective: {selected_curriculum.objective}",
+                    f"- Datasets: `{', '.join(component.dataset_key for component in selected_curriculum.components)}`",
+                    f"- Focus: `{', '.join(selected_curriculum.focus_areas)}`",
+                ]
+            )
+        )
+        if selected_curriculum.notes:
+            st.info(selected_curriculum.notes)
+        if st.button("Run Lightning Feedback Curriculum", use_container_width=True):
+            with st.spinner(f"Running {selected_curriculum.label}..."):
+                try:
+                    experiment_summary, traces, report = run_curriculum_offline_experiment(
+                        selected_curriculum.key,
+                        EXPERIMENTS_ROOT,
+                        settings=settings,
+                        train_cap_per_component=int(curriculum_train_cap),
+                        validation_cap_per_component=int(curriculum_validation_cap),
+                    )
+                    _store_rollout_result(experiment_summary, traces, report)
+                    experiment_summaries = list_experiment_summaries(EXPERIMENTS_ROOT)
+                    st.success(f"Stored curriculum experiment `{experiment_summary.experiment_id}`.")
+                except Exception as exc:
+                    st.session_state["lab_error"] = str(exc)
+    with curriculum_table_col:
+        st.dataframe(pd.DataFrame(curriculum_rows(lightning_curricula)), use_container_width=True, hide_index=True)
 
     if "lab_experiment_summary" in st.session_state:
         from eval.experiment_registry import ExperimentSummary

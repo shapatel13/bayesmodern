@@ -3,6 +3,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from agent.lightning_adapter import LightningRuntimeStatus
+from datasets.curricula import CurriculumAccessMode
 from eval.benchmark_runner import BenchmarkMetricsSummary
 from eval.experiment_registry import ExperimentComparison, ExperimentSummary, PromotionGateDecision
 from eval.presets import ResearchPreset
@@ -25,11 +26,39 @@ class ResearchStatusResponse(BaseModel):
     experiment_namespace: str
     artifacts_root: str
     dataset_count: int
+    curriculum_count: int
     lightning_runtime: LightningRuntimeStatus
 
 
 class DatasetCatalogResponse(BaseModel):
     datasets: list[DatasetCatalogItem]
+
+
+class CurriculumComponentItem(BaseModel):
+    dataset_key: str
+    train_limit: int
+    validation_limit: int
+    subset: str | None = None
+    train_split: str | None = None
+    validation_split: str | None = None
+    weight: int
+    optional: bool
+    notes: str = ""
+
+
+class LightningCurriculumItem(BaseModel):
+    key: str
+    label: str
+    description: str
+    objective: str
+    access_mode: CurriculumAccessMode
+    notes: str = ""
+    focus_areas: list[str]
+    components: list[CurriculumComponentItem]
+
+
+class CurriculumCatalogResponse(BaseModel):
+    curricula: list[LightningCurriculumItem]
 
 
 class ResearchPresetItem(BaseModel):
@@ -88,6 +117,14 @@ class DatasetRolloutResponse(BaseModel):
 
 class PresetRolloutRequest(BaseModel):
     preset_key: str
+
+
+class CurriculumRolloutRequest(BaseModel):
+    curriculum_key: str
+    train_cap_per_component: int = Field(default=8, ge=1, le=250)
+    validation_cap_per_component: int = Field(default=4, ge=0, le=250)
+    prompt_version: str = Field(default="v1-offline")
+    policy_version: str = Field(default="v1-deterministic")
 
 
 class ExperimentListResponse(BaseModel):

@@ -41,6 +41,9 @@ class LightningBundleManifest(BaseModel):
     traces_path: str
     report_path: str
     prompt_template_baseline: str
+    curriculum_key: str | None = None
+    component_datasets: list[str] = Field(default_factory=list)
+    reward_profiles: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
 
 
@@ -94,6 +97,7 @@ def traces_to_lightning_transitions(traces: list[ExperimentTrace]) -> list[Light
     for trace in traces:
         top = trace.report.differential.ranked[0] if trace.report.differential.ranked else None
         recommendation = trace.report.next_best_tests[0] if trace.report.next_best_tests else None
+        task_metadata = dict(trace.task_metadata)
         transitions.append(
             LightningTransition(
                 task_id=trace.task_id,
@@ -103,6 +107,8 @@ def traces_to_lightning_transitions(traces: list[ExperimentTrace]) -> list[Light
                     "triage": trace.report.triage.urgency,
                     "task_type": trace.task_type,
                     "source_dataset": trace.source_dataset,
+                    "curriculum_key": task_metadata.get("curriculum_key"),
+                    "curriculum_component": task_metadata.get("curriculum_component"),
                     "reward_profile": trace.reward.reward_profile if trace.reward else "unknown",
                 },
                 action={
@@ -119,6 +125,9 @@ def traces_to_lightning_transitions(traces: list[ExperimentTrace]) -> list[Light
                     "medication_extraction_quality": trace.reward.medication_extraction_quality if trace.reward else None,
                     "adverse_event_quality": trace.reward.adverse_event_quality if trace.reward else None,
                     "claim_alignment_quality": trace.reward.claim_alignment_quality if trace.reward else None,
+                    "reward_profile_hint": task_metadata.get("reward_profile_hint"),
+                    "source_hf_dataset": task_metadata.get("source_hf_dataset"),
+                    "source_task_family": task_metadata.get("source_task_family"),
                     "contradictions": trace.report.contradictions,
                     "provenance_warnings": trace.report.provenance_warnings,
                 },
@@ -166,6 +175,9 @@ def export_lightning_bundle(
     report_markdown: str,
     output_dir: Path,
     settings: Settings | None = None,
+    curriculum_key: str | None = None,
+    component_datasets: list[str] | None = None,
+    reward_profiles: list[str] | None = None,
 ) -> LightningBundleManifest:
     settings = settings or get_settings()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -189,6 +201,10 @@ def export_lightning_bundle(
         "The bundle is structured for Microsoft Agent Lightning prompt/policy optimization over benchmark tasks only.",
         "No online learning from real patient traffic is permitted in PRIORI-X.",
     ]
+    if curriculum_key:
+        notes.append(f"Curriculum `{curriculum_key}` mixes component datasets: {', '.join(component_datasets or [])}.")
+    if reward_profiles:
+        notes.append(f"Reward profiles covered: {', '.join(reward_profiles)}.")
     if runtime.native_training_ready:
         notes.append("This environment can build a native APO trainer via build_native_lightning_recipe().")
     else:
@@ -202,6 +218,9 @@ def export_lightning_bundle(
         traces_path=str(traces_path),
         report_path=str(report_path),
         prompt_template_baseline=baseline_prompt_template(),
+        curriculum_key=curriculum_key,
+        component_datasets=component_datasets or [],
+        reward_profiles=reward_profiles or [],
         notes=notes,
     )
     manifest_path.write_text(dumps_pretty(manifest.model_dump()), encoding="utf-8")
