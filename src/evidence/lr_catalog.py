@@ -89,6 +89,20 @@ LR_CATALOG: dict[str, list[HypothesisEvidence]] = {
             provenance_refs=["registry:acs_symptom_profile"],
         ),
         HypothesisEvidence(
+            finding_key="diaphoresis",
+            label="Diaphoresis",
+            lr=LikelihoodRatioRange(positive_lr=1.9, negative_lr=0.8, positive_lr_low=1.3, positive_lr_high=2.5),
+            rationale="Diaphoresis increases concern for high-risk ischemic chest pain in the right context.",
+            provenance_refs=["registry:acs_symptom_profile"],
+        ),
+        HypothesisEvidence(
+            finding_key="pain_radiation",
+            label="Radiation to arm or jaw",
+            lr=LikelihoodRatioRange(positive_lr=2.1, negative_lr=0.8, positive_lr_low=1.4, positive_lr_high=2.8),
+            rationale="Pain radiation to arm or jaw favors ischemic chest pain over pulmonary causes.",
+            provenance_refs=["registry:acs_symptom_profile"],
+        ),
+        HypothesisEvidence(
             finding_key="troponin_positive",
             label="Positive troponin",
             lr=LikelihoodRatioRange(positive_lr=4.5, negative_lr=0.4, positive_lr_low=3.0, positive_lr_high=6.0),
@@ -97,4 +111,3 @@ LR_CATALOG: dict[str, list[HypothesisEvidence]] = {
         ),
     ],
 }
-

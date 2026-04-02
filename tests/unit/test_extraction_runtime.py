@@ -15,6 +15,16 @@ def test_keyword_extraction_without_live_llm() -> None:
     assert "angioedema" in context.adverse_events
 
 
+def test_keyword_extraction_recognizes_ischemic_chest_pain_language() -> None:
+    context = extract_context_from_text(
+        case_id="extract-ischemic-1",
+        note_text="Crushing substernal chest pain with diaphoresis and pain radiating to the jaw.",
+        settings=Settings(_env_file=None, allow_live_llm=False),
+    )
+    keys = {finding.key for finding in context.findings}
+    assert {"pressure_chest_pain", "diaphoresis", "pain_radiation"} <= keys
+
+
 def test_extraction_falls_back_when_openai_parse_raises(monkeypatch) -> None:
     from llm import extraction
 

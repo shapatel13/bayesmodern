@@ -6,6 +6,29 @@ from evidence.registry_loader import LREntry
 
 
 TEST_CATALOG: dict[str, CandidateTest] = {
+    "ecg": CandidateTest(
+        slug="ecg",
+        name="12-lead ECG",
+        target_diagnoses=["acs"],
+        diagnosis_lrs={"acs": LikelihoodRatioRange(positive_lr=3.4, negative_lr=0.5)},
+        direct_cost=15,
+        downstream_cost=0,
+        actionability=1.0,
+        urgency_modifier=1.4,
+        bedside=True,
+        provenance_refs=["registry:acs_symptom_profile", "cost:starter_us_hospital"],
+    ),
+    "hs_troponin": CandidateTest(
+        slug="hs_troponin",
+        name="High-sensitivity troponin",
+        target_diagnoses=["acs"],
+        diagnosis_lrs={"acs": LikelihoodRatioRange(positive_lr=4.5, negative_lr=0.4)},
+        direct_cost=45,
+        downstream_cost=120,
+        actionability=0.95,
+        bedside=True,
+        provenance_refs=["registry:acs_symptom_profile", "cost:starter_us_hospital"],
+    ),
     "d_dimer": CandidateTest(
         slug="d_dimer",
         name="D-dimer",

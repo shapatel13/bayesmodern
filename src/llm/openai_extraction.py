@@ -16,8 +16,10 @@ SUPPORTED_FINDINGS: dict[str, str] = {
     "crackles": "Crackles",
     "orthopnea": "Orthopnea",
     "leg_edema": "Leg edema",
-    "pressure_chest_pain": "Pressure-like chest pain",
+    "pressure_chest_pain": "Pressure-like or crushing substernal chest pain",
     "troponin_positive": "Positive troponin",
+    "diaphoresis": "Diaphoresis",
+    "pain_radiation": "Radiation to arm or jaw",
     "purulent_sputum": "Purulent sputum",
 }
 
@@ -53,6 +55,8 @@ def extract_context_with_openai(
                 "content": (
                     "You are a conservative clinical note parser for an offline research system. "
                     "Extract only supported structured findings explicitly or strongly implied in the note. "
+                    "For ischemic chest pain language, map crushing, substernal pressure, heavy pressure, or arm/jaw radiation "
+                    "to the supported chest-pain findings when clearly present. "
                     "Also extract explicit medication names and explicit adverse-event or harm mentions as short phrases. "
                     "Do not diagnose. Do not invent findings. Output only the structured schema."
                 ),

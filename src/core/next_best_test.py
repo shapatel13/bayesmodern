@@ -7,6 +7,16 @@ from core.thresholds import DecisionThresholds
 from core.risk import compute_test_risk_penalty
 
 
+def _contextual_test_multiplier(test: CandidateTest, context: ClinicalDecisionContext) -> float:
+    present_keys = {finding.key for finding in context.findings if finding.present}
+    acs_supportive_context = bool(
+        present_keys & {"pressure_chest_pain", "pain_radiation", "diaphoresis", "troponin_positive"}
+    ) or context.hemodynamic_instability
+    if "acs" in test.target_diagnoses:
+        return 1.35 if acs_supportive_context else 0.7
+    return 1.0
+
+
 def _expected_posterior_movement(current_probability: float, lr_plus: float, lr_minus: float) -> float:
     positive_shift = abs(bayes_update(current_probability, lr_plus) - current_probability)
     negative_shift = abs(bayes_update(current_probability, lr_minus) - current_probability)
@@ -144,6 +154,7 @@ class NextBestTestEngine:
                     evidence_value
                     * max(test.actionability, 0.1) ** resolved_policy.next_test.actionability_weight
                     * urgency_bonus
+                    * _contextual_test_multiplier(test, context)
                 )
                 / (
                     1.0
