@@ -110,4 +110,48 @@ LR_CATALOG: dict[str, list[HypothesisEvidence]] = {
             provenance_refs=["registry:acs_symptom_profile"],
         ),
     ],
+    "upper_gi_bleed": [
+        HypothesisEvidence(
+            finding_key="active_gi_bleeding",
+            label="Active gastrointestinal bleeding",
+            lr=LikelihoodRatioRange(positive_lr=4.0, negative_lr=0.6, positive_lr_low=2.8, positive_lr_high=5.6),
+            rationale="Explicit gastrointestinal bleeding language strongly supports an active GI hemorrhage pathway.",
+            provenance_refs=["registry:upper_gi_bleed_profile"],
+        ),
+        HypothesisEvidence(
+            finding_key="melena",
+            label="Melena",
+            lr=LikelihoodRatioRange(positive_lr=5.5, negative_lr=0.55, positive_lr_low=3.8, positive_lr_high=7.2),
+            rationale="Melena is a high-yield supportive finding for upper gastrointestinal bleeding.",
+            provenance_refs=["registry:upper_gi_bleed_profile"],
+        ),
+        HypothesisEvidence(
+            finding_key="symptomatic_anemia",
+            label="Symptomatic anemia",
+            lr=LikelihoodRatioRange(positive_lr=2.4, negative_lr=0.75, positive_lr_low=1.6, positive_lr_high=3.1),
+            rationale="Symptomatic anemia increases concern for clinically significant blood loss and severity.",
+            provenance_refs=["study:cbc_gi_bleed"],
+        ),
+        HypothesisEvidence(
+            finding_key="anticoagulated",
+            label="On anticoagulation",
+            lr=LikelihoodRatioRange(positive_lr=2.1, negative_lr=0.8, positive_lr_low=1.4, positive_lr_high=2.8),
+            rationale="Active anticoagulation raises the likelihood that ongoing bleeding reflects anticoagulant-associated hemorrhage.",
+            provenance_refs=["study:warfarin_bleeding"],
+        ),
+        HypothesisEvidence(
+            finding_key="pressure_chest_pain",
+            label="Pressure-like chest pain",
+            lr=LikelihoodRatioRange(positive_lr=0.55, negative_lr=1.05, positive_lr_low=0.35, positive_lr_high=0.8),
+            rationale="Primary ischemic chest pain symptoms make GI bleeding a less likely lead explanation.",
+            provenance_refs=["registry:upper_gi_bleed_profile"],
+        ),
+        HypothesisEvidence(
+            finding_key="pleuritic_chest_pain",
+            label="Pleuritic chest pain",
+            lr=LikelihoodRatioRange(positive_lr=0.6, negative_lr=1.02, positive_lr_low=0.4, positive_lr_high=0.85),
+            rationale="Pleuritic pain shifts attention toward pulmonary causes over GI hemorrhage.",
+            provenance_refs=["registry:upper_gi_bleed_profile"],
+        ),
+    ],
 }

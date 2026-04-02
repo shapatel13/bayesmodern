@@ -30,11 +30,22 @@ KEYWORD_FINDINGS: dict[str, tuple[str, str]] = {
     "radiating to the jaw": ("pain_radiation", "Radiation to arm or jaw"),
     "radiates to jaw": ("pain_radiation", "Radiation to arm or jaw"),
     "sputum": ("purulent_sputum", "Purulent sputum"),
+    "melena": ("melena", "Melena"),
+    "black tarry": ("melena", "Melena"),
+    "tarry stool": ("melena", "Melena"),
+    "symptomatic anemia": ("symptomatic_anemia", "Symptomatic anemia"),
+    "gi bleed": ("active_gi_bleeding", "Active gastrointestinal bleeding"),
+    "gastrointestinal bleed": ("active_gi_bleeding", "Active gastrointestinal bleeding"),
+    "hematemesis": ("active_gi_bleeding", "Active gastrointestinal bleeding"),
 }
 
 KEYWORD_MEDICATIONS: dict[str, str] = {
     "warfarin": "warfarin",
     "heparin": "heparin",
+    "apixaban": "apixaban",
+    "rivaroxaban": "rivaroxaban",
+    "dabigatran": "dabigatran",
+    "enoxaparin": "enoxaparin",
     "lisinopril": "lisinopril",
     "vancomycin": "vancomycin",
     "gentamicin": "gentamicin",
@@ -50,7 +61,8 @@ KEYWORD_ADVERSE_EVENTS: dict[str, str] = {
     "gi bleed": "gi bleed",
     "gastrointestinal bleed": "gi bleed",
     "hematemesis": "gi bleed",
-    "melena": "gi bleed",
+    "melena": "melena",
+    "symptomatic anemia": "symptomatic anemia",
     "aki": "acute kidney injury",
     "acute kidney injury": "acute kidney injury",
     "renal failure": "acute kidney injury",
@@ -62,6 +74,13 @@ KEYWORD_ADVERSE_EVENTS: dict[str, str] = {
 }
 
 logger = get_logger(__name__)
+ANTICOAGULANT_MEDICATIONS = {"warfarin", "heparin", "apixaban", "rivaroxaban", "dabigatran", "enoxaparin"}
+
+
+def _append_if_missing(findings: list[ClinicalFinding], key: str, label: str, *, source_type: str = "user_supplied") -> None:
+    if any(item.key == key for item in findings):
+        return
+    findings.append(ClinicalFinding(key=key, label=label, present=True, source_type=source_type))
 
 
 def _keyword_extract_context(case_id: str, note_text: str) -> ClinicalDecisionContext:
@@ -73,6 +92,15 @@ def _keyword_extract_context(case_id: str, note_text: str) -> ClinicalDecisionCo
     ]
     medications = sorted({canonical for needle, canonical in KEYWORD_MEDICATIONS.items() if needle in lowered})
     adverse_events = sorted({canonical for needle, canonical in KEYWORD_ADVERSE_EVENTS.items() if needle in lowered})
+    if set(medications) & ANTICOAGULANT_MEDICATIONS:
+        _append_if_missing(findings, "anticoagulated", "On anticoagulation")
+    if "gi bleed" in adverse_events:
+        _append_if_missing(findings, "active_gi_bleeding", "Active gastrointestinal bleeding")
+    if "melena" in adverse_events:
+        _append_if_missing(findings, "active_gi_bleeding", "Active gastrointestinal bleeding")
+        _append_if_missing(findings, "melena", "Melena")
+    if "symptomatic anemia" in adverse_events:
+        _append_if_missing(findings, "symptomatic_anemia", "Symptomatic anemia")
     return ClinicalDecisionContext(
         case_id=case_id,
         symptoms_free_text=note_text,

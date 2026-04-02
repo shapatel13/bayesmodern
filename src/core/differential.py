@@ -4,7 +4,7 @@ from collections.abc import Mapping
 
 import numpy as np
 
-from core.bayes import normalize_distribution, shannon_entropy
+from core.bayes import bayes_update, normalize_distribution, shannon_entropy
 from core.calibration import classify_calibration
 from core.likelihood_ratios import update_probability_from_evidence
 from core.models import (
@@ -54,10 +54,20 @@ def _contextual_prior_multiplier(
     policy: ReasoningPolicy,
 ) -> float:
     multiplier = 1.0
+    present_keys = {finding.key for finding in context.findings if finding.present}
+    adverse_events = {event.strip().lower() for event in context.adverse_events}
+    medications = {medication.strip().lower() for medication in context.medications}
     if hypothesis.dangerous and (context.hemodynamic_instability or context.critical_values_present):
         multiplier += policy.differential.dangerous_context_boost * max(hypothesis.urgency_weight, 0.5)
     if context.renal_impairment and hypothesis.slug == "heart_failure":
         multiplier += 0.05
+    if hypothesis.slug == "upper_gi_bleed":
+        if present_keys & {"active_gi_bleeding", "melena", "symptomatic_anemia"}:
+            multiplier += 0.55
+        if adverse_events & {"gi bleed", "melena", "symptomatic anemia"}:
+            multiplier += 0.3
+        if medications & {"warfarin", "heparin", "apixaban", "rivaroxaban", "dabigatran", "enoxaparin"}:
+            multiplier += 0.15
     return multiplier
 
 
@@ -73,6 +83,7 @@ def _sample_hypothesis_posterior(
     context: ClinicalDecisionContext,
     hypothesis: DiagnosisHypothesis,
     rng: np.random.Generator,
+    adjustment_factor: float = 1.0,
 ) -> float:
     findings_by_key = {finding.key: finding for finding in context.findings}
     sampled_prior = sample_probability(hypothesis.prior, None, None, rng)
@@ -84,8 +95,8 @@ def _sample_hypothesis_posterior(
         center = evidence.lr.positive_lr if finding.present else evidence.lr.negative_lr
         low = evidence.lr.positive_lr_low if finding.present else evidence.lr.negative_lr_low
         high = evidence.lr.positive_lr_high if finding.present else evidence.lr.negative_lr_high
-        posterior = posterior * sample_lr(center, low, high, rng)
-    return posterior
+        posterior = bayes_update(posterior, sample_lr(center, low, high, rng))
+    return posterior * adjustment_factor
 
 
 class DifferentialEngine:
@@ -103,6 +114,7 @@ class DifferentialEngine:
         evidence_for: dict[str, list] = {}
         evidence_against: dict[str, list] = {}
         coverages: dict[str, float] = {}
+        adjustment_factors: dict[str, float] = {}
 
         for hypothesis in hypotheses:
             posterior, support = update_probability_from_evidence(
@@ -116,6 +128,7 @@ class DifferentialEngine:
             adjusted_posterior *= _coverage_multiplier(coverage, resolved_policy)
             adjusted_posterior *= _contradiction_multiplier(_contradiction_load(support), resolved_policy)
             raw_posteriors[hypothesis.slug] = adjusted_posterior
+            adjustment_factors[hypothesis.slug] = adjusted_posterior / max(posterior, 1e-9)
             evidence_for[hypothesis.slug] = [item for item in support if item.direction == "for"]
             evidence_against[hypothesis.slug] = [item for item in support if item.direction == "against"]
             coverages[hypothesis.slug] = coverage
@@ -123,7 +136,15 @@ class DifferentialEngine:
         normalized = _apply_explaining_away(normalize_distribution(raw_posteriors), coverages, resolved_policy)
         rng = np.random.default_rng(seed)
         sampled = [
-            {hypothesis.slug: _sample_hypothesis_posterior(context, hypothesis, rng) for hypothesis in hypotheses}
+            {
+                hypothesis.slug: _sample_hypothesis_posterior(
+                    context,
+                    hypothesis,
+                    rng,
+                    adjustment_factor=adjustment_factors.get(hypothesis.slug, 1.0),
+                )
+                for hypothesis in hypotheses
+            }
             for _ in range(max(samples, resolved_policy.differential.sample_count))
         ]
         intervals = normalize_sampled_distributions(sampled)

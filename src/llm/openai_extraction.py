@@ -21,6 +21,10 @@ SUPPORTED_FINDINGS: dict[str, str] = {
     "diaphoresis": "Diaphoresis",
     "pain_radiation": "Radiation to arm or jaw",
     "purulent_sputum": "Purulent sputum",
+    "anticoagulated": "On anticoagulation",
+    "active_gi_bleeding": "Active gastrointestinal bleeding",
+    "melena": "Melena",
+    "symptomatic_anemia": "Symptomatic anemia",
 }
 
 
@@ -57,6 +61,8 @@ def extract_context_with_openai(
                     "Extract only supported structured findings explicitly or strongly implied in the note. "
                     "For ischemic chest pain language, map crushing, substernal pressure, heavy pressure, or arm/jaw radiation "
                     "to the supported chest-pain findings when clearly present. "
+                    "For anticoagulation-bleeding language, map warfarin or other anticoagulant exposure, melena, "
+                    "hematemesis, GI bleed phrasing, and symptomatic anemia to the supported bleeding findings when clearly present. "
                     "Also extract explicit medication names and explicit adverse-event or harm mentions as short phrases. "
                     "Do not diagnose. Do not invent findings. Output only the structured schema."
                 ),

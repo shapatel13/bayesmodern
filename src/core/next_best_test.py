@@ -12,8 +12,22 @@ def _contextual_test_multiplier(test: CandidateTest, context: ClinicalDecisionCo
     acs_supportive_context = bool(
         present_keys & {"pressure_chest_pain", "pain_radiation", "diaphoresis", "troponin_positive"}
     ) or context.hemodynamic_instability
+    bleeding_supportive_context = bool(
+        present_keys & {"anticoagulated", "active_gi_bleeding", "melena", "symptomatic_anemia"}
+    ) or bool(
+        {event.strip().lower() for event in context.adverse_events} & {"gi bleed", "melena", "symptomatic anemia"}
+    ) or bool(
+        {medication.strip().lower() for medication in context.medications}
+        & {"warfarin", "heparin", "apixaban", "rivaroxaban", "dabigatran", "enoxaparin"}
+    )
     if "acs" in test.target_diagnoses:
+        if bleeding_supportive_context and not acs_supportive_context:
+            return 0.35
         return 1.35 if acs_supportive_context else 0.7
+    if "upper_gi_bleed" in test.target_diagnoses:
+        return 1.45 if bleeding_supportive_context else 0.8
+    if bleeding_supportive_context and set(test.target_diagnoses) & {"pe", "pneumonia", "heart_failure", "acs"}:
+        return 0.45
     return 1.0
 
 

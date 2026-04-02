@@ -49,6 +49,27 @@ LITERATURE_REGISTRY: dict[str, SourceRecord] = {
         citation="Internal starter registry entry for ACS-oriented findings.",
         notes="Replace with curated local evidence tables for benchmark-grade evaluation.",
     ),
+    "registry:upper_gi_bleed_profile": SourceRecord(
+        source_id="registry:upper_gi_bleed_profile",
+        title="Starter upper GI bleed and anticoagulation profile",
+        kind="registry_note",
+        citation="Internal starter registry entry for upper GI bleeding and anticoagulant-associated hemorrhage cues.",
+        notes="Use as a conservative bridge until curated bleed evidence tables are added.",
+    ),
+    "study:cbc_gi_bleed": SourceRecord(
+        source_id="study:cbc_gi_bleed",
+        title="CBC severity signal in gastrointestinal bleeding",
+        kind="primary_literature",
+        citation="Starter registry entry summarizing hemoglobin and blood-count severity assessment in GI bleed workflows.",
+        notes="Reflects actionability and severity tracking more than binary disease confirmation.",
+    ),
+    "study:warfarin_bleeding": SourceRecord(
+        source_id="study:warfarin_bleeding",
+        title="Warfarin-associated bleeding assessment",
+        kind="primary_literature",
+        citation="Starter registry entry summarizing anticoagulation-related bleeding and reversal workup heuristics.",
+        notes="Replace with curated anticoagulation safety evidence before formal benchmarking.",
+    ),
     "cost:starter_us_hospital": SourceRecord(
         source_id="cost:starter_us_hospital",
         title="Starter US hospital cost tier assumptions",

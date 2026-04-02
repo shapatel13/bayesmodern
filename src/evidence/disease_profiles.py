@@ -81,6 +81,15 @@ DISEASE_PROFILES: dict[str, DiseaseProfile] = {
         urgency_weight=0.9,
         description="Ischemic chest pain syndrome requiring prompt triage and serial reassessment.",
     ),
+    "upper_gi_bleed": DiseaseProfile(
+        slug="upper_gi_bleed",
+        name="Upper Gastrointestinal Bleeding / Anticoagulant-Associated Hemorrhage",
+        category="gastrointestinal",
+        prior=0.09,
+        dangerous=True,
+        urgency_weight=0.95,
+        description="Hemorrhagic gastrointestinal syndrome with anticoagulation-sensitive escalation and transfusion implications.",
+    ),
 }
 
 

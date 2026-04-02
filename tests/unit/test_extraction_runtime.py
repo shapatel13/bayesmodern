@@ -25,6 +25,17 @@ def test_keyword_extraction_recognizes_ischemic_chest_pain_language() -> None:
     assert {"pressure_chest_pain", "diaphoresis", "pain_radiation"} <= keys
 
 
+def test_keyword_extraction_recognizes_anticoagulated_bleeding_language() -> None:
+    context = extract_context_from_text(
+        case_id="extract-bleed-1",
+        note_text="Patient on warfarin with melena and symptomatic anemia after recent dose escalation.",
+        settings=Settings(_env_file=None, allow_live_llm=False),
+    )
+    keys = {finding.key for finding in context.findings}
+    assert {"anticoagulated", "active_gi_bleeding", "melena", "symptomatic_anemia"} <= keys
+    assert "warfarin" in context.medications
+
+
 def test_extraction_falls_back_when_openai_parse_raises(monkeypatch) -> None:
     from llm import extraction
 
