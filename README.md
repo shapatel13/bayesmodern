@@ -124,7 +124,9 @@ On Windows, PRIORI-X exports the Agent Lightning bundle for use in Linux or WSL2
 ```bash
 python -m eval.benchmark_runner
 python -m eval.experiment_cli status
+python -m eval.experiment_cli list-presets
 python -m eval.experiment_cli run-dataset-rollout medmcqa --train-limit 8 --validation-limit 4
+python -m eval.experiment_cli run-preset-rollout core_diagnostic_lab
 python -m eval.experiment_cli list-experiments
 ```
 
@@ -148,8 +150,10 @@ To build a benchmark-driven rollout with an Agent Lightning sandbox bundle, use 
 - `POST /api/benchmark/sample` for a sample offline benchmark sweep
 - `GET /api/research/status` for dataset and Microsoft Agent Lightning runtime metadata
 - `GET /api/research/datasets` for the benchmark catalog
+- `GET /api/research/presets` for named specialty benchmark tracks
 - `POST /api/research/benchmark/dataset` for an on-demand dataset benchmark summary
 - `POST /api/research/rollout/dataset` for an artifact-producing offline rollout
+- `POST /api/research/rollout/preset` for a named specialty-track rollout
 - `GET /api/research/experiments` for recorded experiment summaries
 - `POST /api/research/experiments/compare` for before/after comparison
 
@@ -163,7 +167,9 @@ The Streamlit workbench includes:
 - safety and provenance view
 - calibration panel
 - research lab controls for dataset rollouts
+- specialty preset tracks for ED triage, medication safety, rare disease, and evidence verification
 - experiment registry and comparison view
+- promotion-gate verdicts that block unsafe prompt/policy regressions
 - JSON audit trail
 
 ## OpenAI Model Configuration

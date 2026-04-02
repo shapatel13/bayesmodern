@@ -2,8 +2,9 @@ PYTHON ?= python
 DATASET ?= medmcqa
 BASELINE ?=
 CANDIDATE ?=
+PRESET ?= core_diagnostic_lab
 
-.PHONY: install install-dev test lint format api console research-status rollout-dataset list-experiments compare-experiments
+.PHONY: install install-dev test lint format api console research-status rollout-dataset list-experiments list-presets rollout-preset compare-experiments
 
 install:
 	$(PYTHON) -m pip install -e .
@@ -35,6 +36,12 @@ rollout-dataset:
 
 list-experiments:
 	$(PYTHON) -m eval.experiment_cli list-experiments
+
+list-presets:
+	$(PYTHON) -m eval.experiment_cli list-presets
+
+rollout-preset:
+	$(PYTHON) -m eval.experiment_cli run-preset-rollout $(PRESET)
 
 compare-experiments:
 	$(PYTHON) -m eval.experiment_cli compare-experiments $(BASELINE) $(CANDIDATE)

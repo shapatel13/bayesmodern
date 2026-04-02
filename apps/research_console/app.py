@@ -11,6 +11,7 @@ from agent.offline_rollout import run_dataset_offline_experiment
 from agent.orchestrator import PRIORIXOrchestrator
 from datasets.catalog import get_dataset_spec, list_dataset_specs
 from eval.experiment_registry import compare_experiment_summaries, list_experiment_summaries
+from eval.presets import get_research_preset, list_research_presets
 from security.secrets import validate_live_llm_config
 from ui.charts.probabilities import calibration_figure, differential_figure
 from ui.components.report_cards import headline_cards
@@ -20,6 +21,7 @@ from ui.viewmodels.research_lab import (
     comparison_rows,
     dataset_catalog_rows,
     experiment_rows,
+    preset_rows,
 )
 from utils.config import get_settings
 
@@ -33,6 +35,7 @@ def main() -> None:
     lightning_runtime = detect_lightning_runtime(settings)
     orchestrator = PRIORIXOrchestrator(settings)
     dataset_specs = list_dataset_specs()
+    research_presets = list_research_presets()
     experiment_summaries = list_experiment_summaries(EXPERIMENTS_ROOT)
 
     st.set_page_config(page_title="PRIORI-X Research Console", page_icon="PX", layout="wide")
@@ -123,8 +126,15 @@ def main() -> None:
     run = st.button("Analyze Case", type="primary", use_container_width=True)
 
     if run:
-        report = orchestrator.analyze_text_case("console-case", case_text)
-        st.session_state["report_json"] = report.model_dump()
+        try:
+            report = orchestrator.analyze_text_case("console-case", case_text)
+            st.session_state["report_json"] = report.model_dump()
+            st.session_state.pop("analysis_error", None)
+        except Exception as exc:
+            st.session_state["analysis_error"] = str(exc)
+
+    if "analysis_error" in st.session_state:
+        st.error(f"Case analysis failed but your prior workbench state was preserved: {st.session_state['analysis_error']}")
 
     report_json = st.session_state.get("report_json")
     if report_json:
@@ -154,6 +164,13 @@ def main() -> None:
             st.metric("Triage", report.triage.urgency.title())
             st.metric("Threshold Action", report.threshold_decision.action.replace("_", " ").title())
             st.dataframe(pd.DataFrame(provenance_rows(report)), use_container_width=True, hide_index=True)
+            if report.context.medications or report.context.adverse_events:
+                st.json(
+                    {
+                        "medications": report.context.medications,
+                        "adverse_events": report.context.adverse_events,
+                    }
+                )
             if report.contradictions:
                 st.error("\n".join(report.contradictions))
             if report.provenance_warnings:
@@ -173,19 +190,21 @@ def main() -> None:
 
     st.divider()
     st.subheader("Research Lab")
-    research_metrics = st.columns(4)
+    research_metrics = st.columns(5)
     research_metrics[0].metric("Datasets", len(dataset_specs))
-    research_metrics[1].metric("Experiments", len(experiment_summaries))
-    research_metrics[2].metric("Lightning Mode", lightning_runtime.mode.replace("_", " ").title())
-    research_metrics[3].metric("Native Training Ready", "Yes" if lightning_runtime.native_training_ready else "No")
+    research_metrics[1].metric("Preset Tracks", len(research_presets))
+    research_metrics[2].metric("Experiments", len(experiment_summaries))
+    research_metrics[3].metric("Lightning Mode", lightning_runtime.mode.replace("_", " ").title())
+    research_metrics[4].metric("Native Training Ready", "Yes" if lightning_runtime.native_training_ready else "No")
 
     st.caption(
         "Offline benchmark runs export Microsoft Agent Lightning-compatible traces and transitions. "
         "No live patient traffic is used for self-improvement."
     )
 
-    control_col, catalog_col = st.columns([1, 1.3])
-    with control_col:
+    manual_col, preset_col, catalog_col = st.columns([1, 1, 1.2])
+    with manual_col:
+        st.markdown("#### Manual Rollout")
         selected_dataset = st.selectbox("Benchmark Dataset", [spec.key for spec in dataset_specs], key="lab_dataset")
         selected_spec = get_dataset_spec(selected_dataset)
         subset_value = st.text_input(
@@ -214,6 +233,7 @@ def main() -> None:
                     st.session_state["lab_experiment_report"] = report
                     st.session_state["lab_trace_count"] = len(traces)
                     experiment_summaries = list_experiment_summaries(EXPERIMENTS_ROOT)
+                    st.session_state.pop("lab_error", None)
                     st.success(f"Stored experiment `{experiment_summary.experiment_id}` in {experiment_summary.artifact_dir}")
                 except Exception as exc:
                     st.session_state["lab_error"] = str(exc)
@@ -221,7 +241,51 @@ def main() -> None:
         if "lab_error" in st.session_state:
             st.error(st.session_state["lab_error"])
 
+    with preset_col:
+        st.markdown("#### Specialty Tracks")
+        selected_preset_key = st.selectbox("Research Preset", [preset.key for preset in research_presets], key="lab_preset")
+        selected_preset = get_research_preset(selected_preset_key)
+        st.markdown(f"**{selected_preset.label}**")
+        st.caption(selected_preset.description)
+        st.markdown(
+            "\n".join(
+                [
+                    f"- Dataset: `{selected_preset.dataset_key}`",
+                    f"- Mode: `{selected_preset.clinical_mode}`",
+                    f"- Task family: `{selected_preset.task_family}`",
+                    f"- Train/val: `{selected_preset.train_limit}` / `{selected_preset.validation_limit}`",
+                    f"- Credentials required: `{selected_preset.requires_credentials}`",
+                ]
+            )
+        )
+        if selected_preset.notes:
+            st.info(selected_preset.notes)
+        if st.button("Run Specialty Track", use_container_width=True):
+            with st.spinner(f"Running {selected_preset.label}..."):
+                try:
+                    experiment_summary, traces, report = run_dataset_offline_experiment(
+                        selected_preset.dataset_key,
+                        EXPERIMENTS_ROOT,
+                        subset=selected_preset.subset,
+                        train_limit=selected_preset.train_limit,
+                        validation_limit=selected_preset.validation_limit,
+                        settings=settings,
+                        prompt_version=selected_preset.prompt_version,
+                        policy_version=selected_preset.policy_version,
+                    )
+                    st.session_state["lab_experiment_summary"] = experiment_summary.model_dump()
+                    st.session_state["lab_experiment_report"] = report
+                    st.session_state["lab_trace_count"] = len(traces)
+                    experiment_summaries = list_experiment_summaries(EXPERIMENTS_ROOT)
+                    st.session_state.pop("lab_error", None)
+                    st.success(f"Stored experiment `{experiment_summary.experiment_id}` in {experiment_summary.artifact_dir}")
+                except Exception as exc:
+                    st.session_state["lab_error"] = str(exc)
+
+        st.dataframe(pd.DataFrame(preset_rows(research_presets)), use_container_width=True, hide_index=True)
+
     with catalog_col:
+        st.markdown("#### Dataset Catalog")
         st.dataframe(pd.DataFrame(dataset_catalog_rows(dataset_specs)), use_container_width=True, hide_index=True)
 
     if "lab_experiment_summary" in st.session_state:
@@ -262,6 +326,20 @@ def main() -> None:
             summary_col_1, summary_col_2 = st.columns(2)
             summary_col_1.info(f"Promoted: {promoted}")
             summary_col_2.warning(f"Regressed: {regressed}")
+            if comparison.promotion_gate:
+                verdict = comparison.promotion_gate.verdict
+                message = (
+                    f"Promotion gate: {verdict.upper()}. "
+                    f"Rationale: {', '.join(comparison.promotion_gate.rationale) or 'No meaningful improvements yet.'}"
+                )
+                if verdict == "promote":
+                    st.success(message)
+                elif verdict == "hold":
+                    st.info(message)
+                else:
+                    st.error(
+                        f"{message} Blockers: {', '.join(comparison.promotion_gate.blockers) or 'unspecified regression'}"
+                    )
     else:
         st.caption("Two or more experiments are needed before side-by-side comparison becomes available.")
 
