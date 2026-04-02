@@ -25,6 +25,7 @@ from agent.policy_optimizer import optimize_curriculum_policy, optimize_dataset_
 from core.policy import list_reasoning_policies
 from datasets.catalog import get_dataset_spec, list_dataset_specs
 from datasets.curricula import get_lightning_curriculum, list_lightning_curricula
+from datasets.reviewed_case_store import append_reviewed_case, build_reviewed_case_row, resolve_reviewed_cases_destination
 from eval.experiment_registry import compare_experiment_summaries, list_experiment_summaries
 from eval.presets import get_research_preset, list_research_presets
 from security.secrets import validate_live_llm_config
@@ -87,6 +88,7 @@ def main() -> None:
     lightning_curricula = list_lightning_curricula()
     active_prompt = get_active_prompt_record()
     prompt_records = list_prompt_records()
+    reviewed_cases_destination = resolve_reviewed_cases_destination(settings)
     research_presets = list_research_presets()
     experiment_summaries = list_experiment_summaries(EXPERIMENTS_ROOT)
     api_base_url = os.environ.get("PRIORI_API_BASE_URL")
@@ -281,6 +283,73 @@ def main() -> None:
             )
         with tab5:
             st.code(json.dumps(report.model_dump(), indent=2), language="json")
+
+        with st.expander("Save This Case To Reviewed Cases", expanded=False):
+            st.caption(
+                "Use this to turn a good or bad run into a reviewed case for offline Lightning improvement. "
+                f"Saved rows go to `{reviewed_cases_destination}` and will be picked up by the reviewed-cases curriculum."
+            )
+            suggested_top = report.differential.ranked[0].slug if report.differential.ranked else ""
+            suggested_tests = [recommendation.slug for recommendation in report.next_best_tests[:5]]
+            default_tests = suggested_tests[:2]
+            with st.form("reviewed_case_capture_form", clear_on_submit=False):
+                reviewed_diagnosis = st.text_input(
+                    "Reviewed Diagnosis",
+                    value=suggested_top,
+                    help="Enter your reviewed gold diagnosis. Edit the suggestion if the model was wrong.",
+                )
+                reviewed_tests = st.multiselect(
+                    "Acceptable Tests",
+                    options=suggested_tests,
+                    default=default_tests,
+                    help="Choose tests that would count as acceptable next steps for this case.",
+                )
+                urgency_options = ["routine", "expedited", "urgent", "emergent"]
+                urgency_index = urgency_options.index(report.triage.urgency) if report.triage.urgency in urgency_options else 2
+                reviewed_triage = st.selectbox(
+                    "Reviewed Triage",
+                    urgency_options,
+                    index=urgency_index,
+                )
+                review_status = st.selectbox(
+                    "Review Status",
+                    ["approved", "draft"],
+                    index=0,
+                    help="Use `approved` when you are comfortable using this case in offline improvement runs.",
+                )
+                reviewer_id = st.text_input("Reviewer ID", value="local_reviewer")
+                review_notes = st.text_area(
+                    "Review Notes",
+                    value=(
+                        f"Captured from PRIORI-X. Model top diagnosis was `{suggested_top or 'unknown'}`; "
+                        f"current top tests were {', '.join(suggested_tests[:3]) or 'none'}."
+                    ),
+                    height=120,
+                )
+                save_reviewed_case = st.form_submit_button("Save To Reviewed Cases", use_container_width=True)
+
+            if save_reviewed_case:
+                try:
+                    row = build_reviewed_case_row(
+                        note_text=case_text,
+                        gold_diagnosis=reviewed_diagnosis,
+                        acceptable_tests=reviewed_tests,
+                        gold_triage=reviewed_triage,
+                        review_status=review_status,
+                        reviewer_id=reviewer_id,
+                        review_notes=review_notes,
+                        suggested_top_diagnosis=suggested_top or None,
+                        suggested_next_tests=suggested_tests,
+                        policy_version=selected_case_policy,
+                        prompt_version=active_prompt.version,
+                    )
+                    destination = append_reviewed_case(row, settings)
+                    st.success(
+                        f"Saved reviewed case `{row['id']}` to {destination}. "
+                        "It can now feed the reviewed-cases and continuous-improvement curricula."
+                    )
+                except Exception as exc:
+                    st.error(f"Failed to save reviewed case: {exc}")
 
     st.divider()
     st.subheader("Research Lab")

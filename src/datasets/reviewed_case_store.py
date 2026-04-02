@@ -1,0 +1,68 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from utils.config import Settings, get_settings
+from utils.dates import utc_now
+from utils.ids import make_id
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_DEFAULT_REVIEWED_CASES_PATH = _REPO_ROOT / "artifacts" / "reviewed_cases" / "reviewed_cases.local.jsonl"
+
+
+def resolve_reviewed_cases_destination(settings: Settings | None = None) -> Path:
+    settings = settings or get_settings()
+    raw_path = settings.reviewed_cases_path
+    if not raw_path:
+        return _DEFAULT_REVIEWED_CASES_PATH
+
+    candidate = Path(raw_path)
+    if candidate.suffix.lower() in {".jsonl", ".json", ".csv"}:
+        return candidate
+    return candidate / "reviewed_cases.local.jsonl"
+
+
+def build_reviewed_case_row(
+    *,
+    note_text: str,
+    gold_diagnosis: str | None,
+    acceptable_tests: list[str],
+    gold_triage: str | None,
+    review_status: str,
+    reviewer_id: str | None,
+    review_notes: str | None,
+    suggested_top_diagnosis: str | None = None,
+    suggested_next_tests: list[str] | None = None,
+    policy_version: str | None = None,
+    prompt_version: str | None = None,
+    task_type: str = "diagnosis_open",
+) -> dict[str, Any]:
+    return {
+        "id": f"reviewed-{make_id('case')}",
+        "task_type": task_type,
+        "note_text": note_text.strip(),
+        "gold_diagnosis": gold_diagnosis.strip() if gold_diagnosis else None,
+        "acceptable_tests": [item for item in acceptable_tests if item],
+        "gold_triage": gold_triage.strip() if gold_triage else None,
+        "review_status": review_status.strip().lower(),
+        "reviewer_id": reviewer_id.strip() if reviewer_id else None,
+        "review_notes": review_notes.strip() if review_notes else None,
+        "captured_at": utc_now().isoformat(),
+        "captured_from": "research_console",
+        "suggested_top_diagnosis": suggested_top_diagnosis,
+        "suggested_next_tests": suggested_next_tests or [],
+        "policy_version": policy_version,
+        "prompt_version": prompt_version,
+    }
+
+
+def append_reviewed_case(row: dict[str, Any], settings: Settings | None = None) -> Path:
+    destination = resolve_reviewed_cases_destination(settings)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with destination.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(row, ensure_ascii=True))
+        handle.write("\n")
+    return destination
