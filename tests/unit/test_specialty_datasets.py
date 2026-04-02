@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from datasets.adapters.demo_cases import normalize_demo_case_row
 from agent.trace_schema import ExperimentTrace, RewardBreakdown, TraceStep
 from datasets.adapters.mietic import infer_triage_label, normalize_mietic_row
 from datasets.adapters.n2c2_2018_track2 import normalize_n2c2_2018_track2_row
@@ -144,6 +145,24 @@ def test_n2c2_normalizer_collects_medications_and_adverse_events() -> None:
     assert "causes" in task.metadata["gold_relations"][0]
 
 
+def test_demo_case_normalizer_preserves_tests_and_diagnosis() -> None:
+    task = normalize_demo_case_row(
+        {
+            "id": "demo-1",
+            "task_type": "diagnosis_open",
+            "prompt": "Pleuritic chest pain with hypoxemia after travel.",
+            "gold_diagnosis": "pe",
+            "acceptable_tests": ["d_dimer", "cta_pe"],
+            "gold_triage": "urgent",
+        },
+        "train",
+    )
+
+    assert task.source_dataset == "priorix_demo_cases"
+    assert task.gold_diagnosis == "pe"
+    assert task.acceptable_tests == ["d_dimer", "cta_pe"]
+
+
 def test_local_credentialed_loader_reads_mietic_csv(tmp_path: Path, monkeypatch) -> None:
     from datasets import loader
 
@@ -176,6 +195,19 @@ def test_local_hybrid_loader_reads_n2c2_jsonl(tmp_path: Path, monkeypatch) -> No
 
     assert len(tasks) == 1
     assert tasks[0].metadata["gold_medications"] == ["warfarin"]
+
+
+def test_repo_bundled_demo_datasets_load_without_env_configuration() -> None:
+    reasoning_tasks = load_benchmark_tasks("priorix_demo_cases", split="test", limit=2)
+    triage_tasks = load_benchmark_tasks("mietic_demo", split="test", limit=2)
+    med_tasks = load_benchmark_tasks("n2c2_demo", split="test", limit=2)
+
+    assert len(reasoning_tasks) == 2
+    assert len(triage_tasks) == 2
+    assert len(med_tasks) == 2
+    assert reasoning_tasks[0].task_type == "diagnosis_open"
+    assert triage_tasks[0].task_type == "triage"
+    assert med_tasks[0].task_type == "medication_safety"
 
 
 def test_triage_eval_reports_accuracy_and_confusion() -> None:

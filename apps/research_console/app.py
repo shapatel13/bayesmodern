@@ -27,6 +27,38 @@ from utils.config import get_settings
 
 
 EXPERIMENTS_ROOT = Path("artifacts/evals/experiments")
+GUIDED_DEMO_CASES: dict[str, str] = {
+    "Pulmonary Embolism": (
+        "52-year-old with pleuritic chest pain, tachycardia, and hypoxemia after recent immobility. "
+        "No fever. Concern for pulmonary embolism versus pneumonia."
+    ),
+    "Heart Failure": "68-year-old with orthopnea, crackles, bilateral leg edema, and worsening dyspnea over several days.",
+    "Medication Safety": "Patient on warfarin with melena and symptomatic anemia after recent dose escalation.",
+    "ED Triage": "Crushing chest pain with diaphoresis, hypotension, and concern for immediate resuscitation.",
+    "Rare Disease": "Young adult with renal dysfunction, neuropathic pain, and angiokeratoma-like skin lesions.",
+}
+
+
+def _store_rollout_result(experiment_summary, traces, report) -> None:
+    st.session_state["lab_experiment_summary"] = experiment_summary.model_dump()
+    st.session_state["lab_experiment_report"] = report
+    st.session_state["lab_trace_count"] = len(traces)
+    st.session_state.pop("lab_error", None)
+
+
+def _run_preset_rollout(preset_key: str, settings) -> None:
+    preset = get_research_preset(preset_key)
+    experiment_summary, traces, report = run_dataset_offline_experiment(
+        preset.dataset_key,
+        EXPERIMENTS_ROOT,
+        subset=preset.subset,
+        train_limit=preset.train_limit,
+        validation_limit=preset.validation_limit,
+        settings=settings,
+        prompt_version=preset.prompt_version,
+        policy_version=preset.policy_version,
+    )
+    _store_rollout_result(experiment_summary, traces, report)
 
 
 def main() -> None:
@@ -92,10 +124,7 @@ def main() -> None:
         "patient care decisions."
     )
 
-    sample_case = (
-        "52-year-old with pleuritic chest pain, tachycardia, and hypoxemia after recent immobility. "
-        "No fever. Concern for pulmonary embolism versus pneumonia."
-    )
+    sample_case = GUIDED_DEMO_CASES["Pulmonary Embolism"]
     with st.sidebar:
         st.header("Research Mode")
         st.markdown(
@@ -117,8 +146,9 @@ def main() -> None:
             st.info(lightning_runtime.reason)
         else:
             st.success(lightning_runtime.reason)
-        if st.button("Load PE Demo"):
-            st.session_state["case_text"] = sample_case
+        selected_demo_case = st.selectbox("Guided Demo Case", list(GUIDED_DEMO_CASES.keys()), key="guided_demo_case")
+        if st.button("Load Guided Demo"):
+            st.session_state["case_text"] = GUIDED_DEMO_CASES[selected_demo_case]
         st.caption("Every output remains inspectable, versionable, and explicitly research-only.")
 
     st.session_state.setdefault("case_text", sample_case)
@@ -201,6 +231,36 @@ def main() -> None:
         "Offline benchmark runs export Microsoft Agent Lightning-compatible traces and transitions. "
         "No live patient traffic is used for self-improvement."
     )
+
+    demo_presets = [
+        preset
+        for preset in research_presets
+        if preset.key in {"clinical_reasoning_demo_lab", "ed_triage_demo_lab", "medication_safety_demo_lab"}
+    ]
+    st.markdown("#### Morning Ready")
+    morning_col_1, morning_col_2, morning_col_3 = st.columns(3)
+    morning_col_1.info(
+        "Use `Pulmonary Embolism`, `Heart Failure`, or `Medication Safety` in the guided case selector for a fast first run."
+    )
+    morning_col_2.info(
+        "Run `Clinical Reasoning Demo Lab` or the bundled specialty demos if you want experiment outputs without external datasets."
+    )
+    morning_col_3.info(
+        "If OpenAI is unavailable, PRIORI-X still falls back to the deterministic engine and preserves your prior console state."
+    )
+
+    if demo_presets:
+        st.markdown("#### One-Click Demo Tracks")
+        demo_columns = st.columns(len(demo_presets))
+        for column, preset in zip(demo_columns, demo_presets, strict=True):
+            if column.button(preset.label, use_container_width=True):
+                with st.spinner(f"Running {preset.label}..."):
+                    try:
+                        _run_preset_rollout(preset.key, settings)
+                        experiment_summaries = list_experiment_summaries(EXPERIMENTS_ROOT)
+                        st.success(f"Completed {preset.label}.")
+                    except Exception as exc:
+                        st.session_state["lab_error"] = str(exc)
 
     manual_col, preset_col, catalog_col = st.columns([1, 1, 1.2])
     with manual_col:

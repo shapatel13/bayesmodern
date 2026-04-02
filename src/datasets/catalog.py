@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Literal
 
+from datasets.adapters.demo_cases import normalize_demo_case_row
 from datasets.adapters.findzebra import normalize_findzebra_row
 from datasets.adapters.medmcqa import normalize_medmcqa_row
 from datasets.adapters.medqa import normalize_medqa_row
@@ -32,6 +33,7 @@ class BenchmarkDatasetSpec:
     notes: str = ""
     local_path_env: str | None = None
     local_path_setting: str | None = None
+    local_repo_relative_dir: str | None = None
     local_split_filenames: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
@@ -79,6 +81,24 @@ DATASET_SPECS: dict[str, BenchmarkDatasetSpec] = {
         task_family="diagnosis_open",
         notes="Case-report fields are semi-structured and normalized heuristically into vignette tasks.",
     ),
+    "priorix_demo_cases": BenchmarkDatasetSpec(
+        key="priorix_demo_cases",
+        hf_dataset=None,
+        adapter=normalize_demo_case_row,
+        access_mode="local",
+        default_train_split="train",
+        default_val_split="validation",
+        default_eval_split="test",
+        description="Bundled PRIORI-X clinical demo cases for immediate local use.",
+        task_family="diagnosis_open",
+        notes="Local synthetic cases spanning differential diagnosis and next-best-test reasoning.",
+        local_repo_relative_dir="artifacts/demo_datasets/priorix_demo_cases",
+        local_split_filenames={
+            "train": ("train.jsonl",),
+            "validation": ("validation.jsonl",),
+            "test": ("test.jsonl",),
+        },
+    ),
     "mietic": BenchmarkDatasetSpec(
         key="mietic",
         hf_dataset=None,
@@ -105,6 +125,24 @@ DATASET_SPECS: dict[str, BenchmarkDatasetSpec] = {
             "test": ("test_1500_perceived_triage.csv", "test.csv", "test.jsonl", "test.json"),
         },
     ),
+    "mietic_demo": BenchmarkDatasetSpec(
+        key="mietic_demo",
+        hf_dataset=None,
+        adapter=normalize_mietic_row,
+        access_mode="local",
+        default_train_split="train",
+        default_val_split="validation",
+        default_eval_split="test",
+        description="Bundled triage demo set with ESI-style acuity examples.",
+        task_family="triage",
+        notes="Local synthetic demo rows that exercise triage and under-triage safety logic.",
+        local_repo_relative_dir="artifacts/demo_datasets/mietic_demo",
+        local_split_filenames={
+            "train": ("train.csv",),
+            "validation": ("validation.csv",),
+            "test": ("test.csv",),
+        },
+    ),
     "n2c2_2018_track2": BenchmarkDatasetSpec(
         key="n2c2_2018_track2",
         hf_dataset="bigbio/n2c2_2018_track2",
@@ -126,6 +164,24 @@ DATASET_SPECS: dict[str, BenchmarkDatasetSpec] = {
             "train": ("train.jsonl", "train.json", "train.csv"),
             "validation": ("validation.jsonl", "validation.json", "validation.csv"),
             "test": ("test.jsonl", "test.json", "test.csv"),
+        },
+    ),
+    "n2c2_demo": BenchmarkDatasetSpec(
+        key="n2c2_demo",
+        hf_dataset=None,
+        adapter=normalize_n2c2_2018_track2_row,
+        access_mode="local",
+        default_train_split="train",
+        default_val_split="validation",
+        default_eval_split="test",
+        description="Bundled medication-safety demo set with medication/ADE extraction cases.",
+        task_family="medication_safety",
+        notes="Local synthetic demo rows for medication extraction and adverse-event detection.",
+        local_repo_relative_dir="artifacts/demo_datasets/n2c2_demo",
+        local_split_filenames={
+            "train": ("train.jsonl",),
+            "validation": ("validation.jsonl",),
+            "test": ("test.jsonl",),
         },
     ),
 }

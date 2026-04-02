@@ -1,0 +1,4 @@
+id,instruction,input,output
+triage-test-1,Assign the ED triage category.,Anaphylaxis with stridor after medication exposure.,ESI 1 immediate resuscitation
+triage-test-2,Assign the ED triage category.,Syncope with ongoing chest pain.,ESI 2 high acuity
+triage-test-3,Assign the ED triage category.,Simple laceration needing sutures, vitals normal.,ESI 4 low acuity

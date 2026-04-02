@@ -21,4 +21,5 @@ tmp/
 *.log
 artifacts/models/*
 !artifacts/models/.gitkeep
-
+artifacts/evals/experiments/*
+!artifacts/evals/experiments/.gitkeep

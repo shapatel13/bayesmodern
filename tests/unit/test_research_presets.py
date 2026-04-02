@@ -5,7 +5,14 @@ from eval.presets import get_research_preset, list_research_presets
 
 def test_research_presets_include_specialty_labs() -> None:
     keys = {preset.key for preset in list_research_presets()}
-    assert {"ed_triage_lab", "medication_safety_lab", "rare_disease_lab"} <= keys
+    assert {
+        "ed_triage_lab",
+        "medication_safety_lab",
+        "rare_disease_lab",
+        "clinical_reasoning_demo_lab",
+        "ed_triage_demo_lab",
+        "medication_safety_demo_lab",
+    } <= keys
 
 
 def test_get_research_preset_returns_expected_dataset() -> None:

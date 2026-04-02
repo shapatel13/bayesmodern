@@ -1,0 +1,3 @@
+{"id":"med-val-1","note":"Ibuprofen use followed by acute kidney injury during dehydration.","entities":[{"type":"Drug","text":"ibuprofen"},{"type":"Adverse-Event","text":"acute kidney injury"}],"relations":[{"type":"causes","arg1":"ibuprofen","arg2":"acute kidney injury"}]}
+{"id":"med-val-2","note":"Amiodarone was followed by rash and intolerance.","entities":[{"type":"Drug","text":"amiodarone"},{"type":"Adverse-Event","text":"rash"}],"relations":[{"type":"causes","arg1":"amiodarone","arg2":"rash"}]}
+{"id":"med-val-3","note":"Naproxen associated with melena and GI bleeding.","entities":[{"type":"Drug","text":"naproxen"},{"type":"Adverse-Event","text":"gi bleed"}],"relations":[{"type":"causes","arg1":"naproxen","arg2":"gi bleed"}]}

@@ -1,0 +1,4 @@
+id,instruction,input,output
+triage-val-1,Assign the ED triage category.,Stroke alert with facial droop and aphasia.,ESI 1 immediate resuscitation
+triage-val-2,Assign the ED triage category.,Abdominal pain with guarding and repeated vomiting.,ESI 2 high acuity
+triage-val-3,Assign the ED triage category.,Sore throat and mild cough, tolerating PO.,ESI 4 low acuity

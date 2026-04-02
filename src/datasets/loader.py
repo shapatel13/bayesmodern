@@ -16,26 +16,38 @@ class BenchmarkDatasetPair:
     spec: BenchmarkDatasetSpec
 
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
 def _resolve_local_dataset_file(spec: BenchmarkDatasetSpec, split: str) -> Path | None:
     settings = get_settings()
     raw_path = getattr(settings, spec.local_path_setting, None) if spec.local_path_setting else None
-    if not raw_path:
-        return None
 
-    candidate_path = Path(raw_path)
-    if candidate_path.is_file():
-        return candidate_path
-    if not candidate_path.is_dir():
-        raise FileNotFoundError(f"Configured path for `{spec.key}` does not exist: {candidate_path}")
+    candidate_paths: list[Path] = []
+    if raw_path:
+        candidate_paths.append(Path(raw_path))
+    if spec.local_repo_relative_dir:
+        candidate_paths.append(_REPO_ROOT / spec.local_repo_relative_dir)
 
-    for filename in spec.local_split_filenames.get(split, ()):
-        split_candidate = candidate_path / filename
-        if split_candidate.exists():
-            return split_candidate
-    raise FileNotFoundError(
-        f"Unable to resolve local dataset split `{split}` for `{spec.key}` in {candidate_path}. "
-        f"Tried: {', '.join(spec.local_split_filenames.get(split, ())) or '<no filenames configured>'}"
-    )
+    for candidate_path in candidate_paths:
+        if candidate_path.is_file():
+            return candidate_path
+        if not candidate_path.exists():
+            continue
+        if not candidate_path.is_dir():
+            raise FileNotFoundError(f"Configured path for `{spec.key}` does not exist: {candidate_path}")
+        for filename in spec.local_split_filenames.get(split, ()):
+            split_candidate = candidate_path / filename
+            if split_candidate.exists():
+                return split_candidate
+
+    if raw_path:
+        raise FileNotFoundError(
+            f"Unable to resolve local dataset split `{split}` for `{spec.key}`. "
+            f"Tried configured path `{raw_path}` and filenames: "
+            f"{', '.join(spec.local_split_filenames.get(split, ())) or '<no filenames configured>'}"
+        )
+    return None
 
 
 def _load_rows_for_spec(

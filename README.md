@@ -130,6 +130,15 @@ python -m eval.experiment_cli run-preset-rollout core_diagnostic_lab
 python -m eval.experiment_cli list-experiments
 ```
 
+For a Windows-first morning start, you can use:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\warmup_priori_x.ps1
+powershell -ExecutionPolicy Bypass -File scripts\start_priori_x.ps1
+```
+
+The warmup script seeds the bundled demo presets so the Research Lab has immediate experiments available without external datasets.
+
 Generated artifacts are written to `artifacts/evals`, `artifacts/traces`, and `artifacts/reports`.
 
 To build a benchmark-driven rollout with an Agent Lightning sandbox bundle, use the offline rollout entry points in `src/agent/offline_rollout.py`. The rollout writes:

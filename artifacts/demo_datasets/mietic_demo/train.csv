@@ -1,0 +1,7 @@
+id,instruction,input,output
+triage-train-1,Assign the ED triage category.,Crushing chest pain with diaphoresis and hypotension.,ESI 1 immediate resuscitation
+triage-train-2,Assign the ED triage category.,Severe dyspnea with hypoxemia and tachycardia.,ESI 2 high acuity
+triage-train-3,Assign the ED triage category.,Fever and productive cough with stable blood pressure.,ESI 3 urgent review
+triage-train-4,Assign the ED triage category.,Ankle sprain with isolated pain and normal vitals.,ESI 4 low acuity
+triage-train-5,Assign the ED triage category.,Medication refill request without acute symptoms.,ESI 5 routine
+triage-train-6,Assign the ED triage category.,GI bleed with melena and dizziness.,ESI 2 high acuity

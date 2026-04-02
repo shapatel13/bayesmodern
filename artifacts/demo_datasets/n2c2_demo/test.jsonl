@@ -1,0 +1,3 @@
+{"id":"med-test-1","note":"Lisinopril exposure then angioedema with airway swelling.","entities":[{"type":"Drug","text":"lisinopril"},{"type":"Adverse-Event","text":"angioedema"}],"relations":[{"type":"causes","arg1":"lisinopril","arg2":"angioedema"}]}
+{"id":"med-test-2","note":"Warfarin associated with GI bleed and dizziness.","entities":[{"type":"Drug","text":"warfarin"},{"type":"Adverse-Event","text":"gi bleed"}],"relations":[{"type":"causes","arg1":"warfarin","arg2":"gi bleed"}]}
+{"id":"med-test-3","note":"Gentamicin followed by acute kidney injury in the ICU.","entities":[{"type":"Drug","text":"gentamicin"},{"type":"Adverse-Event","text":"acute kidney injury"}],"relations":[{"type":"causes","arg1":"gentamicin","arg2":"acute kidney injury"}]}

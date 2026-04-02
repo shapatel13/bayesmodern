@@ -21,6 +21,17 @@ class ResearchPreset:
 
 
 RESEARCH_PRESETS: dict[str, ResearchPreset] = {
+    "clinical_reasoning_demo_lab": ResearchPreset(
+        key="clinical_reasoning_demo_lab",
+        label="Clinical Reasoning Demo Lab",
+        dataset_key="priorix_demo_cases",
+        description="Bundled local demo cases for immediate differential and next-best-test benchmarking.",
+        clinical_mode="diagnostic_cockpit",
+        task_family="diagnosis_open",
+        train_limit=6,
+        validation_limit=3,
+        notes="Best first-run preset when you want a no-download benchmark immediately.",
+    ),
     "core_diagnostic_lab": ResearchPreset(
         key="core_diagnostic_lab",
         label="Core Diagnostic Lab",
@@ -78,6 +89,17 @@ RESEARCH_PRESETS: dict[str, ResearchPreset] = {
         requires_credentials=True,
         notes="Requires PRIORI_MIETIC_PATH pointing at a local PhysioNet export.",
     ),
+    "ed_triage_demo_lab": ResearchPreset(
+        key="ed_triage_demo_lab",
+        label="ED Triage Demo Lab",
+        dataset_key="mietic_demo",
+        description="Bundled local triage cases for immediate ED-acuity benchmarking.",
+        clinical_mode="triage_cockpit",
+        task_family="triage",
+        train_limit=6,
+        validation_limit=3,
+        notes="No extra credentials needed; good for first-morning smoke tests.",
+    ),
     "medication_safety_lab": ResearchPreset(
         key="medication_safety_lab",
         label="Medication Safety Lab",
@@ -89,6 +111,17 @@ RESEARCH_PRESETS: dict[str, ResearchPreset] = {
         validation_limit=16,
         requires_credentials=True,
         notes="Requires PRIORI_N2C2_2018_TRACK2_PATH pointing at a local export.",
+    ),
+    "medication_safety_demo_lab": ResearchPreset(
+        key="medication_safety_demo_lab",
+        label="Medication Safety Demo Lab",
+        dataset_key="n2c2_demo",
+        description="Bundled medication and adverse-event extraction cases for immediate safety benchmarking.",
+        clinical_mode="medication_safety",
+        task_family="medication_safety",
+        train_limit=6,
+        validation_limit=3,
+        notes="No extra credentials needed; good for first-morning safety validation.",
     ),
 }
 

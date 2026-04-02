@@ -4,7 +4,7 @@ BASELINE ?=
 CANDIDATE ?=
 PRESET ?= core_diagnostic_lab
 
-.PHONY: install install-dev test lint format api console research-status rollout-dataset list-experiments list-presets rollout-preset compare-experiments
+.PHONY: install install-dev test lint format api console research-status rollout-dataset list-experiments list-presets rollout-preset compare-experiments warmup-demo
 
 install:
 	$(PYTHON) -m pip install -e .
@@ -45,3 +45,6 @@ rollout-preset:
 
 compare-experiments:
 	$(PYTHON) -m eval.experiment_cli compare-experiments $(BASELINE) $(CANDIDATE)
+
+warmup-demo:
+	powershell -ExecutionPolicy Bypass -File scripts\warmup_priori_x.ps1
