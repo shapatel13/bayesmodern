@@ -36,6 +36,19 @@ def test_keyword_extraction_recognizes_anticoagulated_bleeding_language() -> Non
     assert "warfarin" in context.medications
 
 
+def test_keyword_extraction_handles_simple_negation() -> None:
+    context = extract_context_from_text(
+        case_id="extract-neg-1",
+        note_text="Pleuritic chest pain with tachycardia and hypoxemia, no fever.",
+        settings=Settings(_env_file=None, allow_live_llm=False),
+    )
+    findings = {finding.key: finding.present for finding in context.findings}
+    assert findings["pleuritic_chest_pain"] is True
+    assert findings["tachycardia"] is True
+    assert findings["hypoxemia"] is True
+    assert findings["fever"] is False
+
+
 def test_extraction_falls_back_when_openai_parse_raises(monkeypatch) -> None:
     from llm import extraction
 

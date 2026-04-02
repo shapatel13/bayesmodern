@@ -75,6 +75,10 @@ KEYWORD_ADVERSE_EVENTS: dict[str, str] = {
 
 logger = get_logger(__name__)
 ANTICOAGULANT_MEDICATIONS = {"warfarin", "heparin", "apixaban", "rivaroxaban", "dabigatran", "enoxaparin"}
+NEGATION_PREFIXES = ("no ", "without ", "denies ", "denied ", "not ")
+NEGATED_FINDING_ALIASES: dict[str, tuple[str, str]] = {
+    "afebrile": ("fever", "Fever"),
+}
 
 
 def _append_if_missing(findings: list[ClinicalFinding], key: str, label: str, *, source_type: str = "user_supplied") -> None:
@@ -83,13 +87,47 @@ def _append_if_missing(findings: list[ClinicalFinding], key: str, label: str, *,
     findings.append(ClinicalFinding(key=key, label=label, present=True, source_type=source_type))
 
 
+def _replace_or_append_finding(
+    findings_by_key: dict[str, ClinicalFinding],
+    *,
+    key: str,
+    label: str,
+    present: bool,
+    source_type: str = "user_supplied",
+) -> None:
+    existing = findings_by_key.get(key)
+    if existing is None or existing.present is False:
+        findings_by_key[key] = ClinicalFinding(key=key, label=label, present=present, source_type=source_type)
+
+
+def _keyword_signal_state(lowered: str, needle: str) -> bool | None:
+    states: list[bool] = []
+    search_start = 0
+    while True:
+        index = lowered.find(needle, search_start)
+        if index == -1:
+            break
+        prefix = lowered[max(0, index - 24):index]
+        negated = any(prefix.endswith(cue) for cue in NEGATION_PREFIXES)
+        states.append(not negated)
+        search_start = index + len(needle)
+    if not states:
+        return None
+    return True if any(states) else False
+
+
 def _keyword_extract_context(case_id: str, note_text: str) -> ClinicalDecisionContext:
     lowered = note_text.lower()
-    findings = [
-        ClinicalFinding(key=key, label=label, present=True)
-        for needle, (key, label) in KEYWORD_FINDINGS.items()
-        if needle in lowered
-    ]
+    findings_by_key: dict[str, ClinicalFinding] = {}
+    for needle, (key, label) in KEYWORD_FINDINGS.items():
+        state = _keyword_signal_state(lowered, needle)
+        if state is None:
+            continue
+        _replace_or_append_finding(findings_by_key, key=key, label=label, present=state)
+    for needle, (key, label) in NEGATED_FINDING_ALIASES.items():
+        if needle in lowered:
+            findings_by_key[key] = ClinicalFinding(key=key, label=label, present=False)
+    findings = list(findings_by_key.values())
     medications = sorted({canonical for needle, canonical in KEYWORD_MEDICATIONS.items() if needle in lowered})
     adverse_events = sorted({canonical for needle, canonical in KEYWORD_ADVERSE_EVENTS.items() if needle in lowered})
     if set(medications) & ANTICOAGULANT_MEDICATIONS:

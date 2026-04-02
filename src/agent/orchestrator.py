@@ -5,14 +5,38 @@ from core.next_best_test import NextBestTestEngine
 from core.policy import ReasoningPolicy, get_reasoning_policy
 from core.thresholds import DecisionCostModel, calculate_thresholds, explain_threshold_position
 from core.triage import assess_triage
+from agent.prompt_registry import resolve_prompt_template
 from evidence.cost_catalog import default_test_catalog
 from evidence.disease_profiles import DISEASE_PROFILES, default_hypotheses
 from llm.citation_checker import find_missing_citations
 from llm.extraction import extract_context_from_text
 from llm.model_router import route_models
+from llm.open_world_reasoning import (
+    augment_context_with_open_world_findings,
+    generate_open_world_reasoning_plan,
+    merge_open_world_candidate_tests,
+    merge_open_world_hypotheses,
+)
 from llm.structured_output import ResearchReport
 from llm.validators import validate_report
 from utils.config import Settings, get_settings
+from utils.logging import get_logger
+
+
+logger = get_logger(__name__)
+
+
+def _should_expand_open_world(differential) -> bool:
+    if not differential.ranked:
+        return True
+    top_entry = differential.ranked[0]
+    runner_up = differential.ranked[1].posterior if len(differential.ranked) > 1 else 0.0
+    return not (
+        top_entry.posterior >= 0.4
+        and top_entry.symptom_coverage >= 0.5
+        and len(top_entry.evidence_for) >= 2
+        and (top_entry.posterior - runner_up) >= 0.08
+    )
 
 
 class PRIORIXOrchestrator:
@@ -30,22 +54,53 @@ class PRIORIXOrchestrator:
         policy_version: str | None = None,
         prompt_template: str | None = None,
     ) -> ResearchReport:
+        resolved_prompt_template = prompt_template or resolve_prompt_template("active")
         context = extract_context_from_text(
             case_id=case_id,
             note_text=note_text,
             settings=self.settings,
-            prompt_template=prompt_template,
+            prompt_template=resolved_prompt_template,
         )
-        return self.analyze_context(context, policy_version=policy_version)
-
-    def analyze_context(self, context, *, policy_version: str | None = None) -> ResearchReport:
-        policy: ReasoningPolicy = get_reasoning_policy(policy_version) if policy_version else self.policy
-        differential = self.differential_engine.rank(
+        return self.analyze_context(
             context,
-            default_hypotheses(context=context),
+            policy_version=policy_version,
+            prompt_template=resolved_prompt_template,
+        )
+
+    def analyze_context(self, context, *, policy_version: str | None = None, prompt_template: str | None = None) -> ResearchReport:
+        policy: ReasoningPolicy = get_reasoning_policy(policy_version) if policy_version else self.policy
+        base_hypotheses = default_hypotheses(context=context)
+        base_differential = self.differential_engine.rank(
+            context,
+            base_hypotheses,
             seed=self.settings.seed,
             policy=policy,
         )
+        open_world_plan = None
+        differential = base_differential
+        hypotheses = base_hypotheses
+        should_expand = not self.settings.open_world_expand_uncertain_only or _should_expand_open_world(base_differential)
+        if should_expand:
+            try:
+                open_world_plan = generate_open_world_reasoning_plan(
+                    context,
+                    self.settings,
+                    prompt_template=prompt_template,
+                )
+            except Exception as exc:
+                logger.warning("Open-world reasoning generation failed; continuing with deterministic hypothesis pool: %s", exc)
+            context = augment_context_with_open_world_findings(context, open_world_plan)
+            hypotheses = merge_open_world_hypotheses(
+                default_hypotheses(context=context),
+                open_world_plan,
+                context=context,
+            )
+            differential = self.differential_engine.rank(
+                context,
+                hypotheses,
+                seed=self.settings.seed,
+                policy=policy,
+            )
         dangerous_mass = sum(
             entry.posterior * DISEASE_PROFILES[entry.slug].urgency_weight
             for entry in differential.ranked
@@ -69,9 +124,13 @@ class PRIORIXOrchestrator:
             )
         )
         posterior_map = {entry.slug: entry.posterior for entry in differential.ranked}
+        candidates = merge_open_world_candidate_tests(
+            default_test_catalog(context=context),
+            open_world_plan,
+        )
         recommendations = self.next_test_engine.rank(
             posterior_map,
-            default_test_catalog(context=context),
+            candidates,
             context,
             thresholds=thresholds,
             policy=policy,
@@ -88,4 +147,10 @@ class PRIORIXOrchestrator:
         report.contradictions = validate_report(report)
         report.provenance_warnings = find_missing_citations(report)
         report.differential.model_note = f"{report.differential.model_note} Triage mass {dangerous_mass:.3f}; policy `{policy.version}`."
+        if open_world_plan and (open_world_plan.hypotheses or open_world_plan.suggested_tests):
+            report.differential.model_note = (
+                f"{report.differential.model_note} Open-world reasoning expanded the candidate space with "
+                f"{len(open_world_plan.hypotheses)} hypothesis proposals and {len(open_world_plan.suggested_tests)} "
+                "test proposals before deterministic Bayesian scoring."
+            )
         return report

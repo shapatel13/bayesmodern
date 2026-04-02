@@ -103,6 +103,8 @@ class NextBestTestEngine:
     ) -> list[TestRecommendation]:
         resolved_policy = get_reasoning_policy(policy) if isinstance(policy, str) or policy is None else policy
         recommendations: list[TestRecommendation] = []
+        top_diagnosis_slug = max(current_differential, key=current_differential.get) if current_differential else None
+        top_diagnosis_posterior = current_differential.get(top_diagnosis_slug, 0.0) if top_diagnosis_slug else 0.0
         for test in candidates:
             note_prefix = f"{test.evidence_note} " if test.evidence_note else ""
             if test.already_done or test.slug in context.completed_tests:
@@ -162,12 +164,27 @@ class NextBestTestEngine:
                 if context.hemodynamic_instability or context.critical_values_present
                 else 0.0
             )
+            diagnosis_focus_multiplier = 1.0
+            if (
+                top_diagnosis_slug
+                and top_diagnosis_slug in test.target_diagnoses
+                and top_diagnosis_posterior >= 0.3
+                and test.source_type == "llm_inferred"
+            ):
+                diagnosis_focus_multiplier = 1.4
+            target_diagnosis_posterior = max(
+                (current_differential.get(diagnosis, 0.0) for diagnosis in test.target_diagnoses),
+                default=0.0,
+            )
+            diagnosis_alignment_multiplier = 0.7 + min(target_diagnosis_posterior, 0.6)
             stewardship_score = max(
                 0.0,
                 (
                     evidence_value
                     * max(test.actionability, 0.1) ** resolved_policy.next_test.actionability_weight
                     * urgency_bonus
+                    * diagnosis_focus_multiplier
+                    * diagnosis_alignment_multiplier
                     * _contextual_test_multiplier(test, context)
                 )
                 / (

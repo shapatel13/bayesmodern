@@ -70,6 +70,20 @@ LITERATURE_REGISTRY: dict[str, SourceRecord] = {
         citation="Starter registry entry summarizing anticoagulation-related bleeding and reversal workup heuristics.",
         notes="Replace with curated anticoagulation safety evidence before formal benchmarking.",
     ),
+    "llm:open_world_hypothesis_generation": SourceRecord(
+        source_id="llm:open_world_hypothesis_generation",
+        title="Open-world hypothesis generation trace",
+        kind="llm_trace",
+        citation="Internal PRIORI-X trace showing that hypothesis candidates were generated from the case note by the configured reasoning model.",
+        notes="Use for inspectability only; this is not literature evidence.",
+    ),
+    "llm:open_world_test_generation": SourceRecord(
+        source_id="llm:open_world_test_generation",
+        title="Open-world test generation trace",
+        kind="llm_trace",
+        citation="Internal PRIORI-X trace showing that next-test candidates were generated from the case note by the configured reasoning model.",
+        notes="Use for inspectability only; this is not literature evidence.",
+    ),
     "cost:starter_us_hospital": SourceRecord(
         source_id="cost:starter_us_hospital",
         title="Starter US hospital cost tier assumptions",

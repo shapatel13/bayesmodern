@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-SourceKind = Literal["primary_literature", "clinical_rule", "cost_model", "risk_heuristic", "registry_note"]
+SourceKind = Literal["primary_literature", "clinical_rule", "cost_model", "risk_heuristic", "registry_note", "llm_trace"]
 
 
 class SourceRecord(BaseModel):
@@ -25,4 +25,3 @@ def badges_for_refs(source_type: str, refs: list[str]) -> list[ProvenanceBadge]:
     badges = [ProvenanceBadge(label=f"source:{source_type.replace('_', '-')}")]
     badges.extend(ProvenanceBadge(label=ref) for ref in refs)
     return badges
-
