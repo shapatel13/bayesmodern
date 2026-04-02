@@ -25,12 +25,27 @@ class GenerationAuditResult(BaseModel):
     physician_reference_available: bool = False
 
 
+class ReasoningRuntimeTrace(BaseModel):
+    mode: Literal["curated_only", "hybrid_open_world"] = "curated_only"
+    open_world_considered: bool = False
+    open_world_triggered: bool = False
+    gate_reason: str = "Runtime trace unavailable."
+    base_top_diagnosis: str | None = None
+    base_top_posterior: float | None = None
+    final_top_diagnosis: str | None = None
+    final_top_posterior: float | None = None
+    open_world_hypothesis_count: int = 0
+    open_world_test_count: int = 0
+    notes: list[str] = Field(default_factory=list)
+
+
 class ResearchReport(BaseModel):
     context: ClinicalDecisionContext
     differential: DifferentialResult
     next_best_tests: list[TestRecommendation]
     triage: TriageAssessment
     threshold_decision: ThresholdDecision
+    reasoning_runtime: ReasoningRuntimeTrace = Field(default_factory=ReasoningRuntimeTrace)
     contradictions: list[str] = Field(default_factory=list)
     provenance_warnings: list[str] = Field(default_factory=list)
     generation_audit: GenerationAuditResult | None = None

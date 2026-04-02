@@ -3,6 +3,7 @@ from __future__ import annotations
 from agent import orchestrator as orchestrator_module
 from agent.orchestrator import PRIORIXOrchestrator
 from core.models import ClinicalDecisionContext
+from llm.extraction import extract_context_from_text
 from llm.open_world_reasoning import (
     OpenWorldEvidenceClue,
     OpenWorldHypothesisProposal,
@@ -63,6 +64,9 @@ def test_open_world_reasoning_can_add_unseen_diagnosis_and_test(monkeypatch) -> 
     assert any(finding.key == "neck_stiffness" for finding in report.context.findings)
     assert report.differential.ranked[0].slug == "bacterial_meningitis"
     assert report.next_best_tests[0].slug == "lumbar_puncture"
+    assert report.reasoning_runtime.mode == "hybrid_open_world"
+    assert report.reasoning_runtime.open_world_triggered is True
+    assert report.reasoning_runtime.open_world_hypothesis_count == 1
 
 
 def test_open_world_reasoning_can_enrich_existing_hypothesis_without_duplicate(monkeypatch) -> None:
@@ -102,6 +106,7 @@ def test_open_world_reasoning_can_enrich_existing_hypothesis_without_duplicate(m
     assert slugs.count("acs") == 1
     assert report.differential.ranked[0].slug == "acs"
     assert report.next_best_tests[0].slug == "ecg"
+    assert report.reasoning_runtime.mode == "hybrid_open_world"
 
 
 def test_open_world_reasoning_failure_falls_back_to_existing_engine(monkeypatch) -> None:
@@ -122,3 +127,60 @@ def test_open_world_reasoning_failure_falls_back_to_existing_engine(monkeypatch)
     )
 
     assert report.differential.ranked
+    assert report.reasoning_runtime.mode == "curated_only"
+    assert report.reasoning_runtime.open_world_triggered is False
+
+
+def test_confident_curated_case_skips_open_world_generation(monkeypatch) -> None:
+    calls = {"count": 0}
+    extraction_settings = Settings(_env_file=None, allow_live_llm=False, default_model_provider="offline")
+
+    def fake_generate(*args, **kwargs):
+        calls["count"] += 1
+        raise AssertionError("open-world generation should not be called for confident curated cases")
+
+    monkeypatch.setattr(orchestrator_module, "generate_open_world_reasoning_plan", fake_generate)
+    orchestrator = PRIORIXOrchestrator(
+        settings=Settings(_env_file=None, allow_live_llm=True, default_model_provider="openai", openai_api_key="test-key")
+    )
+    context = extract_context_from_text(
+        case_id="open-world-4",
+        note_text="Pleuritic chest pain with tachycardia and hypoxemia, no fever.",
+        settings=extraction_settings,
+    )
+
+    report = orchestrator.analyze_context(context)
+
+    assert calls["count"] == 0
+    assert report.differential.ranked[0].slug == "pe"
+    assert report.reasoning_runtime.mode == "curated_only"
+    assert report.reasoning_runtime.open_world_triggered is False
+
+
+def test_open_world_disabled_by_settings_skips_generation(monkeypatch) -> None:
+    calls = {"count": 0}
+
+    def fake_generate(*args, **kwargs):
+        calls["count"] += 1
+        raise AssertionError("open-world generation should not be called when disabled in settings")
+
+    monkeypatch.setattr(orchestrator_module, "generate_open_world_reasoning_plan", fake_generate)
+    settings = Settings(
+        _env_file=None,
+        allow_live_llm=False,
+        default_model_provider="offline",
+        open_world_reasoning_enabled=False,
+    )
+    context = extract_context_from_text(
+        case_id="open-world-5",
+        note_text="Fever, neck stiffness, and photophobia.",
+        settings=settings,
+    )
+    orchestrator = PRIORIXOrchestrator(settings=settings)
+
+    report = orchestrator.analyze_context(context)
+
+    assert calls["count"] == 0
+    assert report.reasoning_runtime.mode == "curated_only"
+    assert report.reasoning_runtime.open_world_triggered is False
+    assert report.reasoning_runtime.gate_reason == "Open-world expansion disabled by configuration."

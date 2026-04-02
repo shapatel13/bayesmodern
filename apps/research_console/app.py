@@ -290,8 +290,23 @@ def main() -> None:
             for recommendation in report.next_best_tests[:3]:
                 st.info(f"{recommendation.name}: {recommendation.rationale}")
         with tab3:
-            st.metric("Triage", report.triage.urgency.title())
-            st.metric("Threshold Action", report.threshold_decision.action.replace("_", " ").title())
+            runtime_col_1, runtime_col_2, runtime_col_3, runtime_col_4 = st.columns(4)
+            runtime_col_1.metric("Triage", report.triage.urgency.title())
+            runtime_col_2.metric("Threshold Action", report.threshold_decision.action.replace("_", " ").title())
+            runtime_col_3.metric(
+                "Reasoning Mode",
+                "Hybrid Open-World" if report.reasoning_runtime.mode == "hybrid_open_world" else "Curated Bayesian",
+            )
+            runtime_col_4.metric(
+                "Open-World Added",
+                f"{report.reasoning_runtime.open_world_hypothesis_count} dx / {report.reasoning_runtime.open_world_test_count} tests",
+            )
+            if report.reasoning_runtime.mode == "hybrid_open_world":
+                st.info(report.reasoning_runtime.gate_reason)
+            else:
+                st.caption(report.reasoning_runtime.gate_reason)
+            with st.expander("Reasoning Trace", expanded=False):
+                st.json(report.reasoning_runtime.model_dump())
             st.dataframe(pd.DataFrame(provenance_rows(report)), use_container_width=True, hide_index=True)
             if report.context.medications or report.context.adverse_events:
                 st.json(

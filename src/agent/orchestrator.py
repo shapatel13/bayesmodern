@@ -18,6 +18,7 @@ from llm.open_world_reasoning import (
     merge_open_world_hypotheses,
 )
 from llm.structured_output import ResearchReport
+from llm.structured_output import ReasoningRuntimeTrace
 from llm.validators import validate_report
 from utils.config import Settings, get_settings
 from utils.logging import get_logger
@@ -36,6 +37,30 @@ def _should_expand_open_world(differential) -> bool:
         and top_entry.symptom_coverage >= 0.5
         and len(top_entry.evidence_for) >= 2
         and (top_entry.posterior - runner_up) >= 0.08
+    )
+
+
+def _open_world_gate_reason(differential) -> str:
+    if not differential.ranked:
+        return "No ranked differential available yet, so open-world expansion is allowed."
+    top_entry = differential.ranked[0]
+    runner_up = differential.ranked[1].posterior if len(differential.ranked) > 1 else 0.0
+    margin = top_entry.posterior - runner_up
+    if (
+        top_entry.posterior >= 0.4
+        and top_entry.symptom_coverage >= 0.5
+        and len(top_entry.evidence_for) >= 2
+        and margin >= 0.08
+    ):
+        return (
+            f"Curated Bayesian pass was already confident: top diagnosis `{top_entry.slug}` "
+            f"posterior {top_entry.posterior:.3f}, coverage {top_entry.symptom_coverage:.2f}, "
+            f"evidence_for {len(top_entry.evidence_for)}, margin {margin:.3f}."
+        )
+    return (
+        f"Curated Bayesian pass was not yet decisive: top diagnosis `{top_entry.slug}` "
+        f"posterior {top_entry.posterior:.3f}, coverage {top_entry.symptom_coverage:.2f}, "
+        f"evidence_for {len(top_entry.evidence_for)}, margin {margin:.3f}."
     )
 
 
@@ -79,7 +104,14 @@ class PRIORIXOrchestrator:
         open_world_plan = None
         differential = base_differential
         hypotheses = base_hypotheses
-        should_expand = not self.settings.open_world_expand_uncertain_only or _should_expand_open_world(base_differential)
+        gate_reason = (
+            "Open-world expansion disabled by configuration."
+            if not self.settings.open_world_reasoning_enabled
+            else _open_world_gate_reason(base_differential)
+        )
+        should_expand = self.settings.open_world_reasoning_enabled and (
+            not self.settings.open_world_expand_uncertain_only or _should_expand_open_world(base_differential)
+        )
         if should_expand:
             try:
                 open_world_plan = generate_open_world_reasoning_plan(
@@ -142,6 +174,19 @@ class PRIORIXOrchestrator:
             next_best_tests=recommendations,
             triage=triage,
             threshold_decision=threshold_decision,
+            reasoning_runtime=ReasoningRuntimeTrace(
+                mode="hybrid_open_world" if open_world_plan and (open_world_plan.hypotheses or open_world_plan.suggested_tests) else "curated_only",
+                open_world_considered=self.settings.open_world_reasoning_enabled,
+                open_world_triggered=bool(open_world_plan and (open_world_plan.hypotheses or open_world_plan.suggested_tests)),
+                gate_reason=gate_reason,
+                base_top_diagnosis=base_differential.ranked[0].slug if base_differential.ranked else None,
+                base_top_posterior=base_differential.ranked[0].posterior if base_differential.ranked else None,
+                final_top_diagnosis=differential.ranked[0].slug if differential.ranked else None,
+                final_top_posterior=differential.ranked[0].posterior if differential.ranked else None,
+                open_world_hypothesis_count=len(open_world_plan.hypotheses) if open_world_plan else 0,
+                open_world_test_count=len(open_world_plan.suggested_tests) if open_world_plan else 0,
+                notes=(open_world_plan.notes if open_world_plan else []),
+            ),
             model_route=route_models(self.settings),
         )
         report.contradictions = validate_report(report)
