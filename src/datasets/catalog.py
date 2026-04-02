@@ -7,6 +7,7 @@ from datasets.adapters.demo_cases import normalize_demo_case_row
 from datasets.adapters.findzebra import normalize_findzebra_row
 from datasets.adapters.medmcqa import normalize_medmcqa_row
 from datasets.adapters.medqa import normalize_medqa_row
+from datasets.adapters.medval_bench import normalize_medval_bench_row
 from datasets.adapters.mietic import normalize_mietic_row
 from datasets.adapters.n2c2_2018_track2 import normalize_n2c2_2018_track2_row
 from datasets.adapters.pubmedqa import normalize_pubmedqa_row
@@ -35,6 +36,9 @@ class BenchmarkDatasetSpec:
     local_path_setting: str | None = None
     local_repo_relative_dir: str | None = None
     local_split_filenames: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    single_file_split: bool = False
+    split_id_field: str = "id"
+    balance_field: str | None = None
 
 
 DATASET_SPECS: dict[str, BenchmarkDatasetSpec] = {
@@ -184,6 +188,32 @@ DATASET_SPECS: dict[str, BenchmarkDatasetSpec] = {
             "validation": ("validation.jsonl",),
             "test": ("test.jsonl",),
         },
+    ),
+    "medval_bench": BenchmarkDatasetSpec(
+        key="medval_bench",
+        hf_dataset=None,
+        adapter=normalize_medval_bench_row,
+        access_mode="local",
+        default_train_split="train",
+        default_val_split="validation",
+        default_eval_split="test",
+        description="Physician-annotated benchmark for auditing medical text generation errors and risk.",
+        task_family="generation_audit",
+        requires_credentials=True,
+        notes=(
+            "Credential-gated PhysioNet MedVAL-Bench CSV. Point PRIORI_MEDVAL_BENCH_PATH to the local "
+            "single-file export and PRIORI-X will deterministically partition it into train/validation/test."
+        ),
+        local_path_env="PRIORI_MEDVAL_BENCH_PATH",
+        local_path_setting="medval_bench_path",
+        local_split_filenames={
+            "train": ("medval_bench.csv",),
+            "validation": ("medval_bench.csv",),
+            "test": ("medval_bench.csv",),
+        },
+        single_file_split=True,
+        split_id_field="id",
+        balance_field="task",
     ),
 }
 

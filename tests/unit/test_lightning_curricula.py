@@ -10,6 +10,7 @@ def test_lightning_curricula_include_public_feedback_tracks() -> None:
         "diagnostic_reasoning_feedback_lab",
         "evidence_rare_feedback_lab",
         "clinical_safety_feedback_lab",
+        "physician_audit_feedback_lab",
     } <= keys
 
 

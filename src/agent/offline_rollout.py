@@ -16,8 +16,21 @@ from utils.jsonx import dumps_pretty
 
 
 def _reward_profiles_for_tasks(tasks: list[BenchmarkTask], validation_tasks: list[BenchmarkTask] | None = None) -> list[str]:
+    def _profile_for_task(task: BenchmarkTask) -> str:
+        if "reward_profile_hint" in task.metadata:
+            return str(task.metadata["reward_profile_hint"])
+        if task.task_type == "triage":
+            return "triage"
+        if task.task_type == "medication_safety":
+            return "medication_safety"
+        if task.task_type == "evidence_verification":
+            return "evidence_verification"
+        if task.task_type == "generation_audit":
+            return "generation_audit"
+        return "diagnostic"
+
     reward_profiles = {
-        str(task.metadata.get("reward_profile_hint", "diagnostic"))
+        _profile_for_task(task)
         for task in tasks + (validation_tasks or [])
     }
     return sorted(profile for profile in reward_profiles if profile)

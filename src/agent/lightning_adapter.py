@@ -116,6 +116,12 @@ def traces_to_lightning_transitions(traces: list[ExperimentTrace]) -> list[Light
                     "recommended_test": recommendation.slug if recommendation else None,
                     "medications": trace.report.context.medications,
                     "adverse_events": trace.report.context.adverse_events,
+                    "generation_audit_action": (
+                        trace.report.generation_audit.recommended_action if trace.report.generation_audit else None
+                    ),
+                    "predicted_risk_grade": (
+                        trace.report.generation_audit.predicted_risk_grade if trace.report.generation_audit else None
+                    ),
                 },
                 reward=trace.reward.total_reward if trace.reward else 0.0,
                 done=True,
@@ -125,9 +131,11 @@ def traces_to_lightning_transitions(traces: list[ExperimentTrace]) -> list[Light
                     "medication_extraction_quality": trace.reward.medication_extraction_quality if trace.reward else None,
                     "adverse_event_quality": trace.reward.adverse_event_quality if trace.reward else None,
                     "claim_alignment_quality": trace.reward.claim_alignment_quality if trace.reward else None,
+                    "generation_audit_quality": trace.reward.generation_audit_quality if trace.reward else None,
                     "reward_profile_hint": task_metadata.get("reward_profile_hint"),
                     "source_hf_dataset": task_metadata.get("source_hf_dataset"),
                     "source_task_family": task_metadata.get("source_task_family"),
+                    "gold_risk_grade": task_metadata.get("physician_risk_grade"),
                     "contradictions": trace.report.contradictions,
                     "provenance_warnings": trace.report.provenance_warnings,
                 },

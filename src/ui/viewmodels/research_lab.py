@@ -38,6 +38,7 @@ def experiment_rows(summaries: list[ExperimentSummary]) -> list[dict[str, object
             "Urgency Acc": round(summary.benchmark_summary.urgency_accuracy, 3),
             "Med Recall": round(summary.benchmark_summary.medication_recall, 3),
             "ADE Recall": round(summary.benchmark_summary.adverse_event_recall, 3),
+            "Audit Acc": round(summary.benchmark_summary.generation_risk_accuracy, 3),
             "Unsafe Rate": round(summary.benchmark_summary.unsafe_recommendation_rate, 3),
             "Lightning": summary.lightning_runtime.mode,
         }
@@ -55,6 +56,13 @@ def benchmark_summary_cards(summary: BenchmarkMetricsSummary) -> list[tuple[str,
             [
                 ("Med Recall", f"{summary.medication_recall:.1%}"),
                 ("ADE Recall", f"{summary.adverse_event_recall:.1%}"),
+            ]
+        )
+    elif summary.generation_risk_accuracy > 0 or summary.generation_high_risk_recall > 0:
+        cards.extend(
+            [
+                ("Audit Acc", f"{summary.generation_risk_accuracy:.1%}"),
+                ("High-Risk Recall", f"{summary.generation_high_risk_recall:.1%}"),
             ]
         )
     elif summary.urgency_accuracy > 0:

@@ -12,6 +12,7 @@ TaskType = Literal[
     "triage",
     "evidence_verification",
     "medication_safety",
+    "generation_audit",
 ]
 
 
@@ -26,4 +27,5 @@ class BenchmarkTask(BaseModel):
     gold_diagnosis: str | None = None
     acceptable_tests: list[str] = Field(default_factory=list)
     gold_triage: str | None = None
+    gold_risk_grade: int | None = Field(default=None, ge=1, le=4)
     metadata: dict[str, Any] = Field(default_factory=dict)

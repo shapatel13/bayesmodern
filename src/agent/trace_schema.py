@@ -16,6 +16,7 @@ FailureCategory = Literal[
     "calibration_failure",
     "urgency_failure",
     "medication_safety_failure",
+    "generation_audit_failure",
     "unsupported_evidence_claim",
     "malformed_json",
     "contradiction",
@@ -42,6 +43,7 @@ class RewardBreakdown(BaseModel):
     medication_extraction_quality: float | None = None
     adverse_event_quality: float | None = None
     claim_alignment_quality: float | None = None
+    generation_audit_quality: float | None = None
     total_reward: float
     reward_profile: str = "diagnostic"
     component_weights: dict[str, float] = Field(default_factory=dict)

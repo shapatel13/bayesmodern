@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from agent.reward_model import CompositeRewardModel
-from llm.structured_output import ModelRoutingDecision, ResearchReport
+from llm.structured_output import GenerationAuditResult, ModelRoutingDecision, ResearchReport
 from priorix_tasks.common import BenchmarkTask
 
 
@@ -138,3 +138,32 @@ def test_medication_safety_reward_vetoes_missed_adverse_event() -> None:
 
     assert reward.hard_veto is True
     assert "medication_safety_failure" in reward.failure_categories
+
+
+def test_generation_audit_reward_vetoes_undercalled_high_risk_output() -> None:
+    report = _report(urgency="routine")
+    report.generation_audit = GenerationAuditResult(
+        predicted_risk_grade=1,
+        recommended_action="accept",
+        issue_types=[],
+        rationale="No issues detected.",
+        confidence=0.6,
+        reference_available=True,
+        physician_reference_available=True,
+    )
+    reward = CompositeRewardModel().score(
+        BenchmarkTask(
+            task_id="audit-1",
+            source_dataset="medval_bench",
+            split="test",
+            task_type="generation_audit",
+            prompt="audit prompt",
+            gold_risk_grade=4,
+            metadata={"physician_risk_grade": 4},
+        ),
+        report,
+    )
+
+    assert reward.reward_profile == "generation_audit"
+    assert reward.hard_veto is True
+    assert "generation_audit_failure" in reward.failure_categories

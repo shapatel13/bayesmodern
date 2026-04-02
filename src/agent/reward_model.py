@@ -169,12 +169,66 @@ def _evidence_components(task: BenchmarkTask, report: ResearchReport) -> tuple[d
     return components, veto_reasons, failure_categories, claim_alignment_quality
 
 
+def _generation_audit_components(task: BenchmarkTask, report: ResearchReport) -> tuple[dict[str, float], list[str], list[str], float]:
+    components = _common_components(task, report)
+    audit = report.generation_audit
+    gold_risk = task.gold_risk_grade
+
+    if audit is None:
+        components["diagnostic_correctness"] = 0.0
+        components["topk_differential_quality"] = 0.0
+        components["calibration_quality"] = 0.0
+        components["next_test_quality"] = 0.0
+        components["stewardship"] = 1.0
+        return components, ["missing generation audit result"], ["generation_audit_failure"], 0.0
+
+    predicted_risk = audit.predicted_risk_grade
+    distance = abs(predicted_risk - gold_risk) if gold_risk is not None else 0
+    exact_or_close = {0: 1.0, 1: 0.6, 2: 0.25}.get(distance, 0.0)
+    action_quality = 1.0
+    if gold_risk is not None:
+        if gold_risk >= 4:
+            action_quality = 1.0 if audit.recommended_action == "block" else 0.0
+        elif gold_risk >= 3:
+            action_quality = 1.0 if audit.recommended_action in {"manual_review", "block"} else 0.0
+        elif gold_risk == 2:
+            action_quality = 1.0 if audit.recommended_action == "manual_review" else 0.4
+        else:
+            action_quality = 1.0 if audit.recommended_action == "accept" else 0.4
+
+    components["diagnostic_correctness"] = exact_or_close
+    components["topk_differential_quality"] = action_quality
+    components["calibration_quality"] = 1.0 if (gold_risk is None or distance <= 1) else 0.0
+    components["next_test_quality"] = 1.0 if not report.next_best_tests else 0.5
+    components["stewardship"] = 1.0
+
+    failure_categories: list[str] = []
+    veto_reasons: list[str] = []
+    if gold_risk is not None and predicted_risk < gold_risk:
+        if gold_risk >= 3:
+            components["safety"] = 0.0
+            veto_reasons.append("undercalled high-risk generation benchmark case")
+            failure_categories.append("unsafe_recommendation")
+        else:
+            components["safety"] = min(components["safety"], 0.5)
+        failure_categories.append("generation_audit_failure")
+    if gold_risk is not None and predicted_risk > gold_risk + 1:
+        components["stewardship"] = 0.5
+        failure_categories.append("overtesting")
+    if components["provenance"] == 0.0:
+        failure_categories.append("unsupported_evidence_claim")
+    if components["consistency"] == 0.0:
+        failure_categories.append("contradiction")
+    return components, veto_reasons, failure_categories, exact_or_close
+
+
 class CompositeRewardModel:
     def score(self, task: BenchmarkTask, report: ResearchReport) -> RewardBreakdown:
         reward_profile = "diagnostic"
         medication_quality: float | None = None
         adverse_event_quality: float | None = None
         claim_alignment_quality: float | None = None
+        generation_audit_quality: float | None = None
 
         if task.task_type == "triage":
             reward_profile = "triage"
@@ -221,6 +275,21 @@ class CompositeRewardModel:
                 "json_validity": 1.0,
                 "consistency": 2.0,
             }
+        elif task.task_type == "generation_audit":
+            reward_profile = "generation_audit"
+            components, veto_reasons, failure_categories, generation_audit_quality = _generation_audit_components(task, report)
+            component_weights = {
+                "diagnostic_correctness": 2.0,
+                "topk_differential_quality": 2.0,
+                "calibration_quality": 1.0,
+                "next_test_quality": 0.25,
+                "stewardship": 0.75,
+                "safety": 3.0,
+                "urgency": 1.5,
+                "provenance": 1.0,
+                "json_validity": 1.0,
+                "consistency": 1.0,
+            }
         else:
             components, veto_reasons, failure_categories = _diagnosis_components(task, report)
             component_weights = {
@@ -254,6 +323,7 @@ class CompositeRewardModel:
             medication_extraction_quality=medication_quality,
             adverse_event_quality=adverse_event_quality,
             claim_alignment_quality=claim_alignment_quality,
+            generation_audit_quality=generation_audit_quality,
             total_reward=total_reward,
             reward_profile=reward_profile,
             component_weights=component_weights,

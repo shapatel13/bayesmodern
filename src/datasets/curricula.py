@@ -93,6 +93,18 @@ LIGHTNING_CURRICULA: dict[str, LightningCurriculumSpec] = {
         notes="Requires local credentialed data paths and is best used after the public HF curriculum is stable.",
         focus_areas=("triage safety", "medication safety", "hard-veto reduction"),
     ),
+    "physician_audit_feedback_lab": LightningCurriculumSpec(
+        key="physician_audit_feedback_lab",
+        label="Physician Audit Feedback Lab",
+        description="Credentialed MedVAL-Bench curriculum for physician-graded medical text generation audit.",
+        objective="Improve verifier prompts and policies for hallucination detection, unsafe advice blocking, and risk calibration.",
+        access_mode="credentialed",
+        components=(
+            CurriculumComponent("medval_bench", train_limit=120, validation_limit=40, weight=3),
+        ),
+        notes="Best used as a verifier-side feedback track rather than a diagnostic reasoning benchmark.",
+        focus_areas=("generation safety", "hallucination detection", "risk calibration"),
+    ),
 }
 
 

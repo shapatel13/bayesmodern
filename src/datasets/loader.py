@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 from pathlib import Path
 
 from datasets.catalog import BenchmarkDatasetSpec, get_dataset_spec
@@ -80,7 +81,14 @@ def _load_rows_for_spec(
 ) -> list[dict[str, object]]:
     local_path = _resolve_local_dataset_file(spec, split)
     if local_path is not None:
-        return load_local_rows(local_path, limit=limit)
+        rows = load_local_rows(local_path, limit=None if spec.single_file_split else limit)
+        if spec.single_file_split:
+            rows = _partition_single_file_rows(rows, split=split, id_field=spec.split_id_field)
+        else:
+            rows = rows[:limit] if limit is not None else rows
+        if limit is not None:
+            rows = _apply_limit_strategy(rows, limit=limit, balance_field=spec.balance_field)
+        return rows
 
     if spec.hf_dataset is None:
         raise ValueError(
@@ -95,6 +103,44 @@ def _load_rows_for_spec(
                 f"or ensure Hugging Face access is configured. Original error: {exc}"
             ) from exc
         raise
+
+
+def _partition_single_file_rows(rows: list[dict[str, object]], *, split: str, id_field: str) -> list[dict[str, object]]:
+    partitioned: list[dict[str, object]] = []
+    for index, row in enumerate(rows):
+        identifier = str(row.get(id_field) or row.get("#") or index)
+        bucket = int(hashlib.md5(identifier.encode("utf-8")).hexdigest(), 16) % 100
+        if bucket < 70:
+            assigned_split = "train"
+        elif bucket < 85:
+            assigned_split = "validation"
+        else:
+            assigned_split = "test"
+        if assigned_split == split:
+            partitioned.append(row)
+    return partitioned
+
+
+def _apply_limit_strategy(rows: list[dict[str, object]], *, limit: int, balance_field: str | None) -> list[dict[str, object]]:
+    if limit <= 0:
+        return []
+    if not balance_field:
+        return rows[:limit]
+
+    grouped: dict[str, list[dict[str, object]]] = {}
+    for row in rows:
+        key = str(row.get(balance_field) or "unknown")
+        grouped.setdefault(key, []).append(row)
+
+    ordered_keys = sorted(grouped)
+    selected: list[dict[str, object]] = []
+    index = 0
+    while len(selected) < limit and any(grouped.values()):
+        key = ordered_keys[index % len(ordered_keys)]
+        if grouped[key]:
+            selected.append(grouped[key].pop(0))
+        index += 1
+    return selected
 
 
 def load_benchmark_tasks(
@@ -144,6 +190,8 @@ def _reward_profile_for_task_type(task_type: str) -> str:
         return "medication_safety"
     if task_type == "evidence_verification":
         return "evidence_verification"
+    if task_type == "generation_audit":
+        return "generation_audit"
     return "diagnostic"
 
 

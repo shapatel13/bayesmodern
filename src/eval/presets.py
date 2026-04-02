@@ -77,6 +77,18 @@ RESEARCH_PRESETS: dict[str, ResearchPreset] = {
         subset="pqa_labeled",
         notes="Good target for calibration and unsupported-claim reduction.",
     ),
+    "generation_audit_lab": ResearchPreset(
+        key="generation_audit_lab",
+        label="Generation Audit Lab",
+        dataset_key="medval_bench",
+        description="Physician-labeled medical generation audit benchmark for risk grading and output blocking.",
+        clinical_mode="generation_audit",
+        task_family="generation_audit",
+        train_limit=64,
+        validation_limit=24,
+        requires_credentials=True,
+        notes="Requires PRIORI_MEDVAL_BENCH_PATH pointing at the MedVAL-Bench CSV export.",
+    ),
     "ed_triage_lab": ResearchPreset(
         key="ed_triage_lab",
         label="ED Triage Lab",

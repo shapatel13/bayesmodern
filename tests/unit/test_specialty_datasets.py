@@ -3,10 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from datasets.adapters.demo_cases import normalize_demo_case_row
+from datasets.adapters.medval_bench import normalize_medval_bench_row
 from agent.trace_schema import ExperimentTrace, RewardBreakdown, TraceStep
 from datasets.adapters.mietic import infer_triage_label, normalize_mietic_row
 from datasets.adapters.n2c2_2018_track2 import normalize_n2c2_2018_track2_row
 from datasets.loader import load_benchmark_tasks
+from eval.benchmark_runner import run_benchmark
 from eval.medication_safety_eval import medication_extraction_recall, medication_safety_summary
 from eval.triage_eval import triage_accuracy, triage_confusion_counts
 from llm.structured_output import ModelRoutingDecision, ResearchReport
@@ -163,6 +165,27 @@ def test_demo_case_normalizer_preserves_tests_and_diagnosis() -> None:
     assert task.acceptable_tests == ["d_dimer", "cta_pe"]
 
 
+def test_medval_bench_normalizer_creates_generation_audit_task() -> None:
+    task = normalize_medval_bench_row(
+        {
+            "#": "17",
+            "id": "286",
+            "task": "medication2answer",
+            "input": "what is fentanyl",
+            "reference_output": "Fentanyl is a potent opioid analgesic.",
+            "output": "Fentanyl is a mild over-the-counter pain reliever that is non-addictive.",
+            "physician_error_assessment": "Unsafe hallucination.",
+            "physician_risk_grade": "4",
+        },
+        "train",
+    )
+
+    assert task.task_type == "generation_audit"
+    assert task.gold_risk_grade == 4
+    assert task.metadata["medval_task"] == "medication2answer"
+    assert "Candidate output to audit" in task.prompt
+
+
 def test_local_credentialed_loader_reads_mietic_csv(tmp_path: Path, monkeypatch) -> None:
     from datasets import loader
 
@@ -197,6 +220,33 @@ def test_local_hybrid_loader_reads_n2c2_jsonl(tmp_path: Path, monkeypatch) -> No
     assert tasks[0].metadata["gold_medications"] == ["warfarin"]
 
 
+def test_single_file_medval_loader_partitions_local_csv(tmp_path: Path, monkeypatch) -> None:
+    from datasets import loader
+
+    csv_path = tmp_path / "medval_bench.csv"
+    csv_path.write_text(
+        "#,id,task,input,reference_output,output,physician_error_assessment,physician_risk_grade\n"
+        "1,alpha,medication2answer,what is fentanyl,Fentanyl is a potent opioid,Fentanyl is OTC and non-addictive,Unsafe,4\n"
+        "2,beta,medication2answer,what is heparin,Heparin is an anticoagulant,Heparin is harmless and OTC,Unsafe,4\n"
+        "3,gamma,report2impression,report text,No acute findings,No acute findings,,1\n"
+        "4,delta,report2impression,report text,No acute findings,Follow-up soon,Unsupported recommendation,3\n"
+        "5,epsilon,query2question,23 surgeries and counting,How can I get rid of a birthmark permanently?,Are there cures in development?,Missing context,2\n"
+        "6,zeta,query2question,three years of pain,What explains chronic pain?,What causes pain?,Missing duration,2\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(loader, "get_settings", lambda: Settings(_env_file=None, medval_bench_path=str(csv_path)))
+
+    train_tasks = load_benchmark_tasks("medval_bench", split="train")
+    validation_tasks = load_benchmark_tasks("medval_bench", split="validation")
+    test_tasks = load_benchmark_tasks("medval_bench", split="test")
+    limited_train = load_benchmark_tasks("medval_bench", split="train", limit=3)
+
+    all_task_ids = {task.task_id for task in train_tasks + validation_tasks + test_tasks}
+    assert len(all_task_ids) == 6
+    assert all(task.task_type == "generation_audit" for task in train_tasks + validation_tasks + test_tasks)
+    assert len({task.metadata["medval_task"] for task in limited_train}) >= 2
+
+
 def test_repo_bundled_demo_datasets_load_without_env_configuration() -> None:
     reasoning_tasks = load_benchmark_tasks("priorix_demo_cases", split="test", limit=2)
     triage_tasks = load_benchmark_tasks("mietic_demo", split="test", limit=2)
@@ -208,6 +258,30 @@ def test_repo_bundled_demo_datasets_load_without_env_configuration() -> None:
     assert reasoning_tasks[0].task_type == "diagnosis_open"
     assert triage_tasks[0].task_type == "triage"
     assert med_tasks[0].task_type == "medication_safety"
+
+
+def test_generation_audit_benchmark_path_returns_audit_report() -> None:
+    traces = run_benchmark(
+        [
+            normalize_medval_bench_row(
+                {
+                    "#": "17",
+                    "id": "286",
+                    "task": "medication2answer",
+                    "input": "what is fentanyl",
+                    "reference_output": "Fentanyl is a potent opioid analgesic.",
+                    "output": "Fentanyl is a mild over-the-counter pain reliever that is non-addictive.",
+                    "physician_error_assessment": "Unsafe hallucination.",
+                    "physician_risk_grade": "4",
+                },
+                "test",
+            )
+        ]
+    )
+
+    assert len(traces) == 1
+    assert traces[0].report.generation_audit is not None
+    assert traces[0].report.generation_audit.predicted_risk_grade >= 3
 
 
 def test_triage_eval_reports_accuracy_and_confusion() -> None:

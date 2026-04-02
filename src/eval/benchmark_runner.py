@@ -4,12 +4,14 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from agent.generation_audit import audit_generation_task
 from agent.orchestrator import PRIORIXOrchestrator
 from agent.reward_model import CompositeRewardModel
 from agent.trace_schema import ExperimentTrace, TraceStep
 from datasets.loader import load_benchmark_tasks
 from eval.calibration_eval import calibration_summary
 from eval.error_analysis import summarize_failure_categories
+from eval.generation_audit_eval import generation_risk_grade_accuracy, high_risk_generation_recall
 from eval.medication_safety_eval import medication_safety_summary
 from eval.metrics import average, safe_log_loss, top_k_recall
 from eval.next_test_eval import next_test_hit_rate
@@ -32,6 +34,8 @@ class BenchmarkMetricsSummary(BaseModel):
     urgency_accuracy: float
     medication_recall: float = 0.0
     adverse_event_recall: float = 0.0
+    generation_risk_accuracy: float = 0.0
+    generation_high_risk_recall: float = 0.0
     brier_score: float
     expected_calibration_error: float
     log_loss: float
@@ -50,7 +54,21 @@ def run_benchmark(
     reward_model = CompositeRewardModel()
     traces: list[ExperimentTrace] = []
     for task in tasks:
-        report = orchestrator.analyze_text_case(task.task_id, task.prompt)
+        if task.task_type == "generation_audit":
+            report = audit_generation_task(task)
+            trace_steps = [
+                TraceStep(name="extract", detail="Keyword-based structured extraction over MedVAL-Bench input/output pairs"),
+                TraceStep(name="audit", detail="Heuristic generation-risk audit with risk-tier classification"),
+                TraceStep(name="validate", detail="Contradiction and citation checks"),
+            ]
+        else:
+            report = orchestrator.analyze_text_case(task.task_id, task.prompt)
+            trace_steps = [
+                TraceStep(name="extract", detail="Keyword-based structured extraction"),
+                TraceStep(name="differential", detail="Deterministic Bayesian differential"),
+                TraceStep(name="next_test", detail="Stewardship-aware next-best-test ranking"),
+                TraceStep(name="validate", detail="Contradiction and citation checks"),
+            ]
         reward = reward_model.score(task, report)
         traces.append(
             ExperimentTrace(
@@ -64,12 +82,7 @@ def run_benchmark(
                 prompt_version=prompt_version,
                 policy_version=policy_version,
                 model_route=report.model_route.mode,
-                steps=[
-                    TraceStep(name="extract", detail="Keyword-based structured extraction"),
-                    TraceStep(name="differential", detail="Deterministic Bayesian differential"),
-                    TraceStep(name="next_test", detail="Stewardship-aware next-best-test ranking"),
-                    TraceStep(name="validate", detail="Contradiction and citation checks"),
-                ],
+                steps=trace_steps,
                 report=report,
                 reward=reward,
             )
@@ -164,6 +177,8 @@ def summarize_benchmark(traces: list[ExperimentTrace]) -> BenchmarkMetricsSummar
         urgency_accuracy=triage_accuracy(traces) if supported_urgency else 0.0,
         medication_recall=med_safety["medication_recall"],
         adverse_event_recall=med_safety["adverse_event_recall"],
+        generation_risk_accuracy=generation_risk_grade_accuracy(traces),
+        generation_high_risk_recall=high_risk_generation_recall(traces),
         brier_score=calibration["brier_score"],
         expected_calibration_error=calibration["expected_calibration_error"],
         log_loss=safe_log_loss(top_probabilities, top_outcomes) if top_probabilities else 0.0,
@@ -174,27 +189,52 @@ def summarize_benchmark(traces: list[ExperimentTrace]) -> BenchmarkMetricsSummar
 
 def build_markdown_report(traces: list[ExperimentTrace]) -> str:
     summary = summarize_benchmark(traces)
+    generation_only = bool(traces) and all(trace.task_type == "generation_audit" for trace in traces)
     lines = [
         "# PRIORI-X Benchmark Report",
         "",
         f"- Cases: {summary.cases}",
         f"- Mean reward: {summary.mean_reward:.3f}",
         f"- Unsafe recommendation rate: {summary.unsafe_recommendation_rate:.2%}",
-        f"- Next-best-test hit rate: {summary.next_best_test_hit_rate:.2%}",
-        f"- Top-1 differential recall: {summary.top1_differential_recall:.2%}",
-        f"- Top-3 differential recall: {summary.top3_differential_recall:.2%}",
-        f"- Brier score: {summary.brier_score:.3f}",
-        f"- ECE: {summary.expected_calibration_error:.3f}",
-        f"- Log loss: {summary.log_loss:.3f}",
-        "",
-        "## Case Snapshots",
     ]
+    if generation_only:
+        lines.extend(
+            [
+                f"- Generation risk accuracy: {summary.generation_risk_accuracy:.2%}",
+                f"- High-risk generation recall: {summary.generation_high_risk_recall:.2%}",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                f"- Next-best-test hit rate: {summary.next_best_test_hit_rate:.2%}",
+                f"- Top-1 differential recall: {summary.top1_differential_recall:.2%}",
+                f"- Top-3 differential recall: {summary.top3_differential_recall:.2%}",
+                f"- Brier score: {summary.brier_score:.3f}",
+                f"- ECE: {summary.expected_calibration_error:.3f}",
+                f"- Log loss: {summary.log_loss:.3f}",
+            ]
+        )
+        if summary.generation_risk_accuracy > 0 or summary.generation_high_risk_recall > 0:
+            lines.extend(
+                [
+                    f"- Generation risk accuracy: {summary.generation_risk_accuracy:.2%}",
+                    f"- High-risk generation recall: {summary.generation_high_risk_recall:.2%}",
+                ]
+            )
+    lines.extend(["", "## Case Snapshots"])
     for trace in traces:
         top = trace.report.differential.ranked[0] if trace.report.differential.ranked else None
         next_test = trace.report.next_best_tests[0].name if trace.report.next_best_tests else "None"
-        lines.append(
-            f"- `{trace.task_id}`: top diagnosis `{top.slug if top else 'n/a'}`, triage `{trace.report.triage.urgency}`, next test `{next_test}`, reward `{trace.reward.total_reward if trace.reward else 0.0:.2f}`"
-        )
+        if trace.task_type == "generation_audit" and trace.report.generation_audit:
+            lines.append(
+                f"- `{trace.task_id}`: predicted risk `{trace.report.generation_audit.predicted_risk_grade}`, "
+                f"action `{trace.report.generation_audit.recommended_action}`, reward `{trace.reward.total_reward if trace.reward else 0.0:.2f}`"
+            )
+        else:
+            lines.append(
+                f"- `{trace.task_id}`: top diagnosis `{top.slug if top else 'n/a'}`, triage `{trace.report.triage.urgency}`, next test `{next_test}`, reward `{trace.reward.total_reward if trace.reward else 0.0:.2f}`"
+            )
     lines.extend(
         [
             "",

@@ -93,8 +93,9 @@ PRIORI-X normalizes several task families into a shared research schema:
 - `next_best_test`
 - `triage`
 - `evidence_verification`
+- `generation_audit`
 
-Supported adapters include MedMCQA, MedQA, PubMedQA, FindZebra, and an optional MIMIC-like adapter gated behind explicit credentials and local documentation.
+Supported adapters include MedMCQA, MedQA, PubMedQA, FindZebra, MedVAL-Bench, and an optional MIMIC-like adapter gated behind explicit credentials and local documentation.
 
 Current Hugging Face dataset targets:
 
@@ -104,6 +105,12 @@ Current Hugging Face dataset targets:
 - `findzebra/case-reports`
 
 Lightning feedback curricula can now blend these sources into a single offline training bundle for Microsoft Agent Lightning export.
+
+Credentialed local dataset targets include:
+
+- `medval_bench` for physician-graded medical generation audit from a single local CSV
+- `mietic` for ED triage
+- `n2c2_2018_track2` for medication safety
 
 ## Offline Self-Improvement
 
@@ -130,11 +137,14 @@ python -m eval.experiment_cli list-presets
 python -m eval.experiment_cli list-curricula
 python -m eval.experiment_cli run-dataset-rollout medmcqa --train-limit 8 --validation-limit 4
 python -m eval.experiment_cli run-preset-rollout core_diagnostic_lab
+python -m eval.experiment_cli run-preset-rollout generation_audit_lab
 python -m eval.experiment_cli run-curriculum-rollout broad_medical_feedback_lab --train-cap-per-component 1 --validation-cap-per-component 1
 python -m eval.experiment_cli list-experiments
 ```
 
 The broad public curriculum is the fastest way to get MedMCQA, MedQA, PubMedQA, and FindZebra into one Lightning-compatible bundle. Use small per-component caps for a quick morning pass, then increase them for longer offline optimization runs.
+
+If you have the PhysioNet MedVAL-Bench CSV locally, set `PRIORI_MEDVAL_BENCH_PATH` and use `generation_audit_lab` or `physician_audit_feedback_lab` to improve the verifier side of PRIORI-X. The loader partitions the single CSV deterministically and balances limited runs across MedVAL task groups.
 
 For a Windows-first morning start, you can use:
 
@@ -186,6 +196,7 @@ The Streamlit workbench includes:
 - research lab controls for dataset rollouts
 - Lightning feedback curriculum controls for multi-dataset Hugging Face training bundles
 - specialty preset tracks for ED triage, medication safety, rare disease, and evidence verification
+- physician-audit preset and curriculum for MedVAL-Bench generation-risk benchmarking
 - experiment registry and comparison view
 - promotion-gate verdicts that block unsafe prompt/policy regressions
 - JSON audit trail

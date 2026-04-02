@@ -8,6 +8,7 @@ def test_research_presets_include_specialty_labs() -> None:
     assert {
         "ed_triage_lab",
         "medication_safety_lab",
+        "generation_audit_lab",
         "rare_disease_lab",
         "clinical_reasoning_demo_lab",
         "ed_triage_demo_lab",
