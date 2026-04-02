@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     trace_retention_days: int = Field(default=30, alias="PRIORI_TRACE_RETENTION_DAYS")
     seed: int = Field(default=17, alias="PRIORI_SEED")
     experiment_namespace: str = Field(default="local-dev", alias="PRIORI_EXPERIMENT_NAMESPACE")
+    mietic_path: str | None = Field(default=None, alias="PRIORI_MIETIC_PATH")
+    n2c2_2018_track2_path: str | None = Field(default=None, alias="PRIORI_N2C2_2018_TRACK2_PATH")
 
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     google_api_key: str | None = Field(default=None, alias="GOOGLE_API_KEY")

@@ -5,7 +5,14 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-TaskType = Literal["diagnosis_mcq", "diagnosis_open", "next_best_test", "triage", "evidence_verification"]
+TaskType = Literal[
+    "diagnosis_mcq",
+    "diagnosis_open",
+    "next_best_test",
+    "triage",
+    "evidence_verification",
+    "medication_safety",
+]
 
 
 class BenchmarkTask(BaseModel):
@@ -20,4 +27,3 @@ class BenchmarkTask(BaseModel):
     acceptable_tests: list[str] = Field(default_factory=list)
     gold_triage: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
-

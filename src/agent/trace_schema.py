@@ -48,6 +48,7 @@ class ExperimentTrace(BaseModel):
     task_id: str
     source_dataset: str
     task_type: str
+    task_metadata: dict[str, Any] = Field(default_factory=dict)
     gold_diagnosis: str | None = None
     acceptable_tests: list[str] = Field(default_factory=list)
     gold_triage: str | None = None

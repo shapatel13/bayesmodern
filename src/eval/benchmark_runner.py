@@ -53,6 +53,7 @@ def run_benchmark(
                 task_id=task.task_id,
                 source_dataset=task.source_dataset,
                 task_type=task.task_type,
+                task_metadata=task.metadata,
                 gold_diagnosis=task.gold_diagnosis,
                 acceptable_tests=task.acceptable_tests,
                 gold_triage=task.gold_triage,

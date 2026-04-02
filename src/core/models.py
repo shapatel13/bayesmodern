@@ -124,6 +124,7 @@ class ClinicalDecisionContext(BaseModel):
     completed_tests: list[str] = Field(default_factory=list)
     comorbidities: list[str] = Field(default_factory=list)
     medications: list[str] = Field(default_factory=list)
+    adverse_events: list[str] = Field(default_factory=list)
     symptoms_free_text: str | None = None
     age_years: int | None = Field(default=None, ge=0)
     pregnant: bool = False

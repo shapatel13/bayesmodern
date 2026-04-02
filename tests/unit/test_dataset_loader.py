@@ -3,6 +3,7 @@ from __future__ import annotations
 from datasets.adapters.findzebra import normalize_findzebra_row
 from datasets.catalog import get_dataset_spec
 from datasets.loader import load_benchmark_tasks, load_train_validation_tasks
+from utils.config import Settings
 
 
 def test_medmcqa_loader_normalizes_question_rows(monkeypatch) -> None:
@@ -50,6 +51,19 @@ def test_train_validation_loader_uses_dataset_defaults(monkeypatch) -> None:
     assert pair.spec == get_dataset_spec("medqa")
     assert pair.train[0].source_dataset == "medqa"
     assert pair.validation[0].source_dataset == "medqa"
+
+
+def test_credential_gated_dataset_without_path_raises_helpful_error(monkeypatch) -> None:
+    from datasets import loader
+
+    monkeypatch.setattr(loader, "get_settings", lambda: Settings(_env_file=None))
+
+    try:
+        load_benchmark_tasks("mietic", split="test", limit=1)
+    except ValueError as exc:
+        assert "PRIORI_MIETIC_PATH" in str(exc)
+    else:
+        raise AssertionError("Expected local-only dataset access to raise a helpful error.")
 
 
 def test_findzebra_case_report_normalizer_handles_list_fields() -> None:
