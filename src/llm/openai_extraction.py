@@ -24,6 +24,8 @@ SUPPORTED_FINDINGS: dict[str, str] = {
 class OpenAIParsedContext(BaseModel):
     specialty: str = "general_internal_medicine"
     positive_finding_keys: list[str] = Field(default_factory=list)
+    medications: list[str] = Field(default_factory=list)
+    adverse_events: list[str] = Field(default_factory=list)
     hemodynamic_instability: bool = False
     critical_values_present: bool = False
     renal_impairment: bool = False
@@ -43,6 +45,7 @@ def extract_context_with_openai(case_id: str, note_text: str, settings: Settings
                 "content": (
                     "You are a conservative clinical note parser for an offline research system. "
                     "Extract only supported structured findings explicitly or strongly implied in the note. "
+                    "Also extract explicit medication names and explicit adverse-event or harm mentions as short phrases. "
                     "Do not diagnose. Do not invent findings. Output only the structured schema."
                 ),
             },
@@ -66,8 +69,9 @@ def extract_context_with_openai(case_id: str, note_text: str, settings: Settings
         specialty=result.specialty,
         symptoms_free_text=note_text,
         findings=findings,
+        medications=[item.strip().lower() for item in result.medications if item.strip()],
+        adverse_events=[item.strip().lower() for item in result.adverse_events if item.strip()],
         renal_impairment=result.renal_impairment,
         hemodynamic_instability=result.hemodynamic_instability,
         critical_values_present=result.critical_values_present,
     )
-

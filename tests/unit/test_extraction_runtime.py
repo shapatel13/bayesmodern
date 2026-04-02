@@ -6,11 +6,13 @@ from utils.config import Settings
 def test_keyword_extraction_without_live_llm() -> None:
     context = extract_context_from_text(
         case_id="extract-1",
-        note_text="Pleuritic chest pain with tachycardia and hypoxemia.",
+        note_text="Pleuritic chest pain with tachycardia and hypoxemia after lisinopril-associated angioedema.",
         settings=Settings(_env_file=None, allow_live_llm=False),
     )
     keys = {finding.key for finding in context.findings}
     assert {"pleuritic_chest_pain", "tachycardia", "hypoxemia"} <= keys
+    assert "lisinopril" in context.medications
+    assert "angioedema" in context.adverse_events
 
 
 def test_extraction_falls_back_when_openai_parse_raises(monkeypatch) -> None:
@@ -42,6 +44,8 @@ def test_extraction_merges_openai_and_keyword_findings(monkeypatch) -> None:
             case_id="extract-3",
             specialty="pulmonary",
             findings=[ClinicalFinding(key="fever", label="Fever", present=True, source_type="llm_inferred")],
+            medications=["warfarin"],
+            adverse_events=["gi bleed"],
         )
 
     monkeypatch.setattr(extraction, "extract_context_with_openai", fake_parse)
@@ -58,3 +62,5 @@ def test_extraction_merges_openai_and_keyword_findings(monkeypatch) -> None:
     keys = {finding.key for finding in context.findings}
     assert {"fever", "pleuritic_chest_pain", "tachycardia"} <= keys
     assert context.specialty == "pulmonary"
+    assert "warfarin" in context.medications
+    assert "gi bleed" in context.adverse_events

@@ -10,9 +10,11 @@ from agent.trace_schema import ExperimentTrace, TraceStep
 from datasets.loader import load_benchmark_tasks
 from eval.calibration_eval import calibration_summary
 from eval.error_analysis import summarize_failure_categories
+from eval.medication_safety_eval import medication_safety_summary
 from eval.metrics import average, safe_log_loss, top_k_recall
 from eval.next_test_eval import next_test_hit_rate
 from eval.safety_eval import unsafe_recommendation_rate
+from eval.triage_eval import triage_accuracy
 from priorix_tasks.common import BenchmarkTask
 from utils.jsonx import dumps_pretty
 
@@ -28,6 +30,8 @@ class BenchmarkMetricsSummary(BaseModel):
     unsupported_claim_rate: float
     contradiction_rate: float
     urgency_accuracy: float
+    medication_recall: float = 0.0
+    adverse_event_recall: float = 0.0
     brier_score: float
     expected_calibration_error: float
     log_loss: float
@@ -145,6 +149,7 @@ def summarize_benchmark(traces: list[ExperimentTrace]) -> BenchmarkMetricsSummar
         if trace.report.differential.ranked
     ]
     calibration = calibration_summary(traces)
+    med_safety = medication_safety_summary(traces)
 
     return BenchmarkMetricsSummary(
         cases=len(traces),
@@ -156,11 +161,9 @@ def summarize_benchmark(traces: list[ExperimentTrace]) -> BenchmarkMetricsSummar
         unsafe_recommendation_rate=unsafe_recommendation_rate(traces),
         unsupported_claim_rate=sum(1 for trace in traces if trace.report.provenance_warnings) / len(traces) if traces else 0.0,
         contradiction_rate=sum(1 for trace in traces if trace.report.contradictions) / len(traces) if traces else 0.0,
-        urgency_accuracy=(
-            sum(1 for trace in supported_urgency if trace.report.triage.urgency == trace.gold_triage) / len(supported_urgency)
-            if supported_urgency
-            else 0.0
-        ),
+        urgency_accuracy=triage_accuracy(traces) if supported_urgency else 0.0,
+        medication_recall=med_safety["medication_recall"],
+        adverse_event_recall=med_safety["adverse_event_recall"],
         brier_score=calibration["brier_score"],
         expected_calibration_error=calibration["expected_calibration_error"],
         log_loss=safe_log_loss(top_probabilities, top_outcomes) if top_probabilities else 0.0,

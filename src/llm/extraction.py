@@ -19,6 +19,35 @@ KEYWORD_FINDINGS: dict[str, tuple[str, str]] = {
     "sputum": ("purulent_sputum", "Purulent sputum"),
 }
 
+KEYWORD_MEDICATIONS: dict[str, str] = {
+    "warfarin": "warfarin",
+    "heparin": "heparin",
+    "lisinopril": "lisinopril",
+    "vancomycin": "vancomycin",
+    "gentamicin": "gentamicin",
+    "metformin": "metformin",
+    "insulin": "insulin",
+    "amiodarone": "amiodarone",
+    "ibuprofen": "ibuprofen",
+    "naproxen": "naproxen",
+}
+
+KEYWORD_ADVERSE_EVENTS: dict[str, str] = {
+    "angioedema": "angioedema",
+    "gi bleed": "gi bleed",
+    "gastrointestinal bleed": "gi bleed",
+    "hematemesis": "gi bleed",
+    "melena": "gi bleed",
+    "aki": "acute kidney injury",
+    "acute kidney injury": "acute kidney injury",
+    "renal failure": "acute kidney injury",
+    "hypoglycemia": "hypoglycemia",
+    "hyperkalemia": "hyperkalemia",
+    "rash": "rash",
+    "thrombocytopenia": "thrombocytopenia",
+    "bleeding": "bleeding",
+}
+
 logger = get_logger(__name__)
 
 
@@ -29,10 +58,14 @@ def _keyword_extract_context(case_id: str, note_text: str) -> ClinicalDecisionCo
         for needle, (key, label) in KEYWORD_FINDINGS.items()
         if needle in lowered
     ]
+    medications = sorted({canonical for needle, canonical in KEYWORD_MEDICATIONS.items() if needle in lowered})
+    adverse_events = sorted({canonical for needle, canonical in KEYWORD_ADVERSE_EVENTS.items() if needle in lowered})
     return ClinicalDecisionContext(
         case_id=case_id,
         symptoms_free_text=note_text,
         findings=findings,
+        medications=medications,
+        adverse_events=adverse_events,
         hemodynamic_instability=any(token in lowered for token in ("shock", "hypotension", "unstable")),
         critical_values_present=any(token in lowered for token in ("lactate", "critical", "severe hypoxia")),
     )
@@ -48,7 +81,8 @@ def _merge_contexts(primary: ClinicalDecisionContext, fallback: ClinicalDecision
         findings=list(merged_findings.values()),
         completed_tests=fallback.completed_tests,
         comorbidities=fallback.comorbidities,
-        medications=fallback.medications,
+        medications=sorted({*fallback.medications, *primary.medications}),
+        adverse_events=sorted({*fallback.adverse_events, *primary.adverse_events}),
         symptoms_free_text=primary.symptoms_free_text or fallback.symptoms_free_text,
         age_years=primary.age_years or fallback.age_years,
         pregnant=primary.pregnant or fallback.pregnant,

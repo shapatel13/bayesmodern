@@ -15,6 +15,7 @@ FailureCategory = Literal[
     "cost_insensitive",
     "calibration_failure",
     "urgency_failure",
+    "medication_safety_failure",
     "unsupported_evidence_claim",
     "malformed_json",
     "contradiction",
@@ -38,7 +39,12 @@ class RewardBreakdown(BaseModel):
     provenance: float
     json_validity: float
     consistency: float
+    medication_extraction_quality: float | None = None
+    adverse_event_quality: float | None = None
+    claim_alignment_quality: float | None = None
     total_reward: float
+    reward_profile: str = "diagnostic"
+    component_weights: dict[str, float] = Field(default_factory=dict)
     hard_veto: bool = False
     veto_reasons: list[str] = Field(default_factory=list)
     failure_categories: list[FailureCategory] = Field(default_factory=list)
