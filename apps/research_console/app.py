@@ -26,6 +26,7 @@ from core.policy import list_reasoning_policies
 from datasets.catalog import get_dataset_spec, list_dataset_specs
 from datasets.curricula import get_lightning_curriculum, list_lightning_curricula
 from datasets.reviewed_case_store import (
+    REVIEWED_CASE_TAGS,
     append_reviewed_case,
     build_reviewed_case_row,
     load_reviewed_cases,
@@ -67,6 +68,30 @@ def _store_rollout_result(experiment_summary, traces, report) -> None:
     st.session_state["lab_experiment_report"] = report
     st.session_state["lab_trace_count"] = len(traces)
     st.session_state.pop("lab_error", None)
+
+
+def _normalize_slugish(value: str | None) -> str:
+    return str(value or "").strip().lower().replace(" ", "_")
+
+
+def _merge_review_tags(*groups: list[str]) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        for raw_tag in group:
+            tag = str(raw_tag or "").strip().lower()
+            if not tag or tag in seen:
+                continue
+            seen.add(tag)
+            merged.append(tag)
+    return merged
+
+
+def _format_tag_counts(tag_counts: dict[str, int], *, limit: int = 5) -> str:
+    if not tag_counts:
+        return "No review tags yet."
+    top_items = list(tag_counts.items())[:limit]
+    return ", ".join(f"`{tag}` ({count})" for tag, count in top_items)
 
 
 def _run_preset_rollout(preset_key: str, settings) -> None:
@@ -325,6 +350,15 @@ def main() -> None:
                     index=0,
                     help="Use `approved` when you are comfortable using this case in offline improvement runs.",
                 )
+                review_tags = st.multiselect(
+                    "Review Tags",
+                    options=list(REVIEWED_CASE_TAGS),
+                    default=[],
+                    help=(
+                        "Tag why you are saving this case so Lightning experiments and error analysis can target the "
+                        "right failure mode."
+                    ),
+                )
                 reviewer_id = st.text_input("Reviewer ID", value="local_reviewer")
                 review_notes = st.text_area(
                     "Review Notes",
@@ -338,6 +372,14 @@ def main() -> None:
 
             if save_reviewed_case:
                 try:
+                    auto_tags: list[str] = []
+                    if _normalize_slugish(reviewed_diagnosis) and _normalize_slugish(reviewed_diagnosis) != _normalize_slugish(
+                        suggested_top
+                    ):
+                        auto_tags.append("wrong_top_diagnosis")
+                    if _normalize_slugish(reviewed_triage) != _normalize_slugish(report.triage.urgency):
+                        auto_tags.append("urgency_error")
+                    final_review_tags = _merge_review_tags(review_tags, auto_tags)
                     row = build_reviewed_case_row(
                         note_text=case_text,
                         gold_diagnosis=reviewed_diagnosis,
@@ -350,12 +392,15 @@ def main() -> None:
                         suggested_next_tests=suggested_tests,
                         policy_version=selected_case_policy,
                         prompt_version=active_prompt.version,
+                        tags=final_review_tags,
                     )
                     destination = append_reviewed_case(row, settings)
                     st.success(
                         f"Saved reviewed case `{row['id']}` to {destination}. "
                         "It can now feed the reviewed-cases and continuous-improvement curricula."
                     )
+                    if final_review_tags:
+                        st.caption(f"Saved tags: {', '.join(final_review_tags)}")
                 except Exception as exc:
                     st.error(f"Failed to save reviewed case: {exc}")
 
@@ -378,11 +423,13 @@ def main() -> None:
         "Lightning feedback curriculum for offline reward-bearing policy optimization."
     )
     st.markdown("#### Reviewed Cases Inbox")
-    inbox_col_1, inbox_col_2, inbox_col_3 = st.columns(3)
+    inbox_col_1, inbox_col_2, inbox_col_3, inbox_col_4 = st.columns(4)
     inbox_col_1.metric("Reviewed Cases", reviewed_cases_summary["total_cases"])
     inbox_col_2.metric("Approved", reviewed_cases_summary["approved_cases"])
     inbox_col_3.metric("Draft", reviewed_cases_summary["draft_cases"])
+    inbox_col_4.metric("Tagged", reviewed_cases_summary["tagged_cases"])
     st.caption(f"Local reviewed-case inbox: `{reviewed_cases_destination}`")
+    st.caption(f"Top review tags: {_format_tag_counts(reviewed_cases_summary['tag_counts'])}")
     if reviewed_recent_rows:
         inbox_table = pd.DataFrame(
             [
@@ -391,6 +438,7 @@ def main() -> None:
                     "diagnosis": row.get("gold_diagnosis"),
                     "triage": row.get("gold_triage"),
                     "status": row.get("review_status"),
+                    "tags": ", ".join(row.get("tags") or []),
                     "captured_at": row.get("captured_at"),
                 }
                 for row in reviewed_recent_rows

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,33 @@ from utils.ids import make_id
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_REVIEWED_CASES_PATH = _REPO_ROOT / "artifacts" / "reviewed_cases" / "reviewed_cases.local.jsonl"
+REVIEWED_CASE_TAGS: tuple[str, ...] = (
+    "wrong_top_diagnosis",
+    "bad_next_test",
+    "urgency_error",
+    "parser_miss",
+    "unsupported_claim",
+    "hallucination",
+    "weak_calibration",
+    "safety_risk",
+    "cost_stewardship",
+    "good_counterexample",
+)
+
+
+def _normalize_tags(tags: list[str] | None) -> list[str]:
+    if not tags:
+        return []
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw_tag in tags:
+        tag = str(raw_tag or "").strip().lower()
+        if not tag or tag in seen:
+            continue
+        seen.add(tag)
+        normalized.append(tag)
+    return normalized
 
 
 def resolve_reviewed_cases_destination(settings: Settings | None = None) -> Path:
@@ -38,6 +66,7 @@ def build_reviewed_case_row(
     suggested_next_tests: list[str] | None = None,
     policy_version: str | None = None,
     prompt_version: str | None = None,
+    tags: list[str] | None = None,
     task_type: str = "diagnosis_open",
 ) -> dict[str, Any]:
     return {
@@ -56,6 +85,7 @@ def build_reviewed_case_row(
         "suggested_next_tests": suggested_next_tests or [],
         "policy_version": policy_version,
         "prompt_version": prompt_version,
+        "tags": _normalize_tags(tags),
     }
 
 
@@ -92,10 +122,21 @@ def summarize_reviewed_cases(settings: Settings | None = None) -> dict[str, Any]
     approved = sum(1 for row in rows if str(row.get("review_status") or "").lower() == "approved")
     draft = sum(1 for row in rows if str(row.get("review_status") or "").lower() == "draft")
     diagnoses = [str(row.get("gold_diagnosis") or "unknown") for row in rows]
+    tagged_cases = sum(1 for row in rows if row.get("tags"))
+    tag_counts = Counter(
+        str(tag).strip().lower()
+        for row in rows
+        for tag in (row.get("tags") or [])
+        if str(tag).strip()
+    )
+    sorted_tag_counts = dict(sorted(tag_counts.items(), key=lambda item: (-item[1], item[0])))
     return {
         "total_cases": len(rows),
         "approved_cases": approved,
         "draft_cases": draft,
+        "tagged_cases": tagged_cases,
+        "tag_counts": sorted_tag_counts,
+        "top_tag": next(iter(sorted_tag_counts), None),
         "recent_rows": rows[:5],
         "diagnoses": diagnoses[:10],
     }

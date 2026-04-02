@@ -20,6 +20,7 @@ def test_reviewed_case_store_appends_jsonl_row(tmp_path) -> None:
         suggested_next_tests=["cxr"],
         policy_version="v1-deterministic",
         prompt_version="v1-offline",
+        tags=["wrong_top_diagnosis", "parser_miss", "wrong_top_diagnosis"],
     )
 
     destination = reviewed_case_store.append_reviewed_case(row, settings)
@@ -28,6 +29,7 @@ def test_reviewed_case_store_appends_jsonl_row(tmp_path) -> None:
     assert payload["gold_diagnosis"] == "acs"
     assert payload["acceptable_tests"] == ["ecg", "hs_troponin"]
     assert payload["suggested_top_diagnosis"] == "pneumonia"
+    assert payload["tags"] == ["wrong_top_diagnosis", "parser_miss"]
 
 
 def test_reviewed_case_store_resolves_default_destination(tmp_path, monkeypatch) -> None:
@@ -52,6 +54,7 @@ def test_reviewed_case_store_summarizes_rows(tmp_path) -> None:
         review_status="approved",
         reviewer_id="tester",
         review_notes="Approved regression case.",
+        tags=["wrong_top_diagnosis", "parser_miss"],
     )
     second = reviewed_case_store.build_reviewed_case_row(
         note_text="Fever and crackles.",
@@ -61,6 +64,7 @@ def test_reviewed_case_store_summarizes_rows(tmp_path) -> None:
         review_status="draft",
         reviewer_id="tester",
         review_notes="Draft case.",
+        tags=["good_counterexample"],
     )
     reviewed_case_store.append_reviewed_case(first, settings)
     reviewed_case_store.append_reviewed_case(second, settings)
@@ -70,4 +74,8 @@ def test_reviewed_case_store_summarizes_rows(tmp_path) -> None:
     assert summary["total_cases"] == 2
     assert summary["approved_cases"] == 1
     assert summary["draft_cases"] == 1
+    assert summary["tagged_cases"] == 2
+    assert summary["tag_counts"]["good_counterexample"] == 1
+    assert summary["tag_counts"]["parser_miss"] == 1
+    assert summary["tag_counts"]["wrong_top_diagnosis"] == 1
     assert summary["recent_rows"][0]["gold_diagnosis"] == "pneumonia"
