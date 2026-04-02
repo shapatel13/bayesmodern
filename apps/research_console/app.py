@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -84,6 +85,8 @@ def main() -> None:
     lightning_curricula = list_lightning_curricula()
     research_presets = list_research_presets()
     experiment_summaries = list_experiment_summaries(EXPERIMENTS_ROOT)
+    api_base_url = os.environ.get("PRIORI_API_BASE_URL")
+    startup_command = "python run_priori_x.py"
 
     st.set_page_config(page_title="PRIORI-X Research Console", page_icon="PX", layout="wide")
     st.markdown(
@@ -142,21 +145,20 @@ def main() -> None:
     sample_case = GUIDED_DEMO_CASES["Pulmonary Embolism"]
     with st.sidebar:
         st.header("Research Mode")
-        st.markdown(
-            "\n".join(
-                [
-                    f"- Safety mode: `{settings.safety_mode}`",
-                    f"- Live external LLMs: `{settings.allow_live_llm}`",
-                    f"- Provider: `{settings.default_model_provider}`",
-                    f"- OpenAI parser: `{settings.openai_parser_model}`",
-                    f"- OpenAI reasoner: `{settings.openai_reasoning_model}`",
-                    f"- Provider ready: `{secret_status.provider_ready}`",
-                    f"- Microsoft Agent Lightning: `{lightning_runtime.mode}`",
-                    f"- Trace redaction: `{settings.redact_traces}`",
-                    f"- Namespace: `{settings.experiment_namespace}`",
-                ]
-            )
-        )
+        sidebar_lines = [
+            f"- Safety mode: `{settings.safety_mode}`",
+            f"- Live external LLMs: `{settings.allow_live_llm}`",
+            f"- Provider: `{settings.default_model_provider}`",
+            f"- OpenAI parser: `{settings.openai_parser_model}`",
+            f"- OpenAI reasoner: `{settings.openai_reasoning_model}`",
+            f"- Provider ready: `{secret_status.provider_ready}`",
+            f"- Microsoft Agent Lightning: `{lightning_runtime.mode}`",
+            f"- Trace redaction: `{settings.redact_traces}`",
+            f"- Namespace: `{settings.experiment_namespace}`",
+        ]
+        if api_base_url:
+            sidebar_lines.append(f"- API: `{api_base_url}`")
+        st.markdown("\n".join(sidebar_lines))
         if lightning_runtime.mode == "export_only":
             st.info(lightning_runtime.reason)
         else:
@@ -555,6 +557,29 @@ def main() -> None:
                     )
     else:
         st.caption("Two or more experiments are needed before side-by-side comparison becomes available.")
+
+    st.markdown("#### System")
+    system_col_1, system_col_2 = st.columns([1, 1])
+    system_col_1.markdown("**Launcher**")
+    system_col_1.code(startup_command, language="bash")
+    system_col_1.code(f"{startup_command} --check", language="bash")
+    if api_base_url:
+        system_col_1.success(f"Integrated API available at `{api_base_url}`")
+    else:
+        system_col_1.info("Use the launcher command above to start the API and Streamlit workbench together.")
+
+    system_col_2.markdown("**Runtime**")
+    system_col_2.json(
+        {
+            "provider_ready": secret_status.provider_ready,
+            "allow_live_llm": secret_status.allow_live_llm,
+            "missing_required_secrets": secret_status.missing_required_secrets,
+            "lightning_mode": lightning_runtime.mode,
+            "mietic_path": settings.mietic_path,
+            "n2c2_2018_track2_path": settings.n2c2_2018_track2_path,
+            "medval_bench_path": settings.medval_bench_path,
+        }
+    )
 
     st.markdown("</div>", unsafe_allow_html=True)
 

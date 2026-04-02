@@ -80,8 +80,22 @@ python -m venv .venv
 pip install -e .[dev,datasets,lightning]
 copy .env.example .env
 python -m pytest
+python run_priori_x.py --check
+python run_priori_x.py
 uvicorn apps.api.main:app --reload
 streamlit run apps/research_console/app.py
+```
+
+The easiest integrated launch path from a normal VS Code terminal is:
+
+```bash
+python run_priori_x.py
+```
+
+That starts the FastAPI surface and the Streamlit workbench together. If you want a preflight check without opening the app, use:
+
+```bash
+python run_priori_x.py --check
 ```
 
 ## Benchmarks
@@ -149,14 +163,23 @@ The broad public curriculum is the fastest way to get MedMCQA, MedQA, PubMedQA, 
 
 If you have the PhysioNet MedVAL-Bench CSV locally, set `PRIORI_MEDVAL_BENCH_PATH` and use `generation_audit_lab` or `physician_audit_feedback_lab` to improve the verifier side of PRIORI-X. The loader partitions the single CSV deterministically and balances limited runs across MedVAL task groups.
 
-For a Windows-first morning start, you can use:
+For a Windows-first morning start, you can use either:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\warmup_priori_x.ps1
+python run_priori_x.py
+```
+
+Or, if you prefer the PowerShell wrapper:
+
+```powershell
 powershell -ExecutionPolicy Bypass -File scripts\start_priori_x.ps1
 ```
 
-The warmup script seeds bundled smoke-test experiments so the Research Lab has immediate artifacts even before external datasets finish loading.
+The optional warmup script still exists if you want bundled smoke-test artifacts before external datasets finish loading:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\warmup_priori_x.ps1
+```
 
 Generated artifacts are written to `artifacts/evals`, `artifacts/traces`, and `artifacts/reports`.
 

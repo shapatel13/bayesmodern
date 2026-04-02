@@ -1,5 +1,7 @@
 param(
-    [switch]$SkipWarmup
+    [switch]$Check,
+    [switch]$NoApi,
+    [switch]$Headless
 )
 
 $ErrorActionPreference = "Stop"
@@ -9,15 +11,17 @@ $pythonExe = if (Test-Path $venvPython) { $venvPython } else { "python" }
 
 Push-Location $repoRoot
 try {
-    if (-not $SkipWarmup) {
-        & (Join-Path $repoRoot "scripts\warmup_priori_x.ps1")
+    $arguments = @((Join-Path $repoRoot "run_priori_x.py"))
+    if ($Check) {
+        $arguments += "--check"
     }
-
-    $apiCommand = "Set-Location '$repoRoot'; `$env:PYTHONPATH='src'; & '$pythonExe' -m uvicorn apps.api.main:app --reload"
-    Start-Process powershell -ArgumentList "-NoExit", "-Command", $apiCommand | Out-Null
-
-    $env:PYTHONPATH = "src"
-    & $pythonExe -m streamlit run apps/research_console/app.py
+    if ($NoApi) {
+        $arguments += "--no-api"
+    }
+    if ($Headless) {
+        $arguments += "--headless"
+    }
+    & $pythonExe @arguments
 }
 finally {
     Pop-Location
