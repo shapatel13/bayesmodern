@@ -59,6 +59,7 @@ def test_experiment_cli_status_prints_runtime(capsys) -> None:
     assert exit_code == 0
     assert "lightning_runtime" in captured
     assert "medmcqa" in captured["datasets"]
+    assert "core_diagnostic_lab" in captured["presets"]
 
 
 def test_experiment_cli_compare_prints_deltas(monkeypatch, capsys) -> None:
@@ -75,3 +76,12 @@ def test_experiment_cli_compare_prints_deltas(monkeypatch, capsys) -> None:
     captured = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert captured["delta_mean_reward"] > 0
+    assert captured["promotion_gate"]["verdict"] in {"promote", "hold", "reject"}
+
+
+def test_experiment_cli_lists_presets(capsys) -> None:
+    exit_code = main(["list-presets"])
+
+    captured = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert any(item["key"] == "ed_triage_lab" for item in captured)

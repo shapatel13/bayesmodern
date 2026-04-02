@@ -16,11 +16,15 @@ from apps.api.schemas.research import (
     ExperimentComparisonRequest,
     ExperimentComparisonResponse,
     ExperimentListResponse,
+    PresetCatalogResponse,
+    PresetRolloutRequest,
+    ResearchPresetItem,
     ResearchStatusResponse,
 )
 from datasets.catalog import BenchmarkDatasetSpec, get_dataset_spec, list_dataset_specs
 from eval.benchmark_runner import build_markdown_report, run_dataset_benchmark, summarize_benchmark
 from eval.experiment_registry import compare_experiment_summaries, list_experiment_summaries
+from eval.presets import ResearchPreset, get_research_preset, list_research_presets
 from utils.config import get_settings
 
 
@@ -41,6 +45,24 @@ def _dataset_item(spec: BenchmarkDatasetSpec) -> DatasetCatalogItem:
         task_family=spec.task_family,
         requires_credentials=spec.requires_credentials,
         notes=spec.notes,
+    )
+
+
+def _preset_item(preset: ResearchPreset) -> ResearchPresetItem:
+    return ResearchPresetItem(
+        key=preset.key,
+        label=preset.label,
+        dataset_key=preset.dataset_key,
+        description=preset.description,
+        clinical_mode=preset.clinical_mode,
+        task_family=preset.task_family,
+        train_limit=preset.train_limit,
+        validation_limit=preset.validation_limit,
+        subset=preset.subset,
+        prompt_version=preset.prompt_version,
+        policy_version=preset.policy_version,
+        requires_credentials=preset.requires_credentials,
+        notes=preset.notes,
     )
 
 
@@ -65,6 +87,11 @@ def research_status() -> ResearchStatusResponse:
 @router.get("/research/datasets", response_model=DatasetCatalogResponse)
 def research_datasets() -> DatasetCatalogResponse:
     return DatasetCatalogResponse(datasets=[_dataset_item(spec) for spec in list_dataset_specs()])
+
+
+@router.get("/research/presets", response_model=PresetCatalogResponse)
+def research_presets() -> PresetCatalogResponse:
+    return PresetCatalogResponse(presets=[_preset_item(preset) for preset in list_research_presets()])
 
 
 @router.post("/research/benchmark/dataset", response_model=DatasetBenchmarkResponse)
@@ -113,6 +140,32 @@ def rollout_dataset(request: DatasetRolloutRequest) -> DatasetRolloutResponse:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Offline rollout failed: {exc}") from exc
+
+    return DatasetRolloutResponse(
+        experiment=experiment_summary,
+        report=report,
+        task_ids=[trace.task_id for trace in traces],
+    )
+
+
+@router.post("/research/rollout/preset", response_model=DatasetRolloutResponse)
+def rollout_preset(request: PresetRolloutRequest) -> DatasetRolloutResponse:
+    try:
+        preset = get_research_preset(request.preset_key)
+        experiment_summary, traces, report = run_dataset_offline_experiment(
+            preset.dataset_key,
+            ARTIFACTS_ROOT,
+            subset=preset.subset,
+            train_limit=preset.train_limit,
+            validation_limit=preset.validation_limit,
+            settings=get_settings(),
+            prompt_version=preset.prompt_version,
+            policy_version=preset.policy_version,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Preset rollout failed: {exc}") from exc
 
     return DatasetRolloutResponse(
         experiment=experiment_summary,

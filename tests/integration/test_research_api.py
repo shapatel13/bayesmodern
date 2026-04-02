@@ -161,11 +161,14 @@ def test_research_dataset_catalog_and_status_endpoints() -> None:
 
     status_response = client.get("/api/research/status")
     datasets_response = client.get("/api/research/datasets")
+    presets_response = client.get("/api/research/presets")
 
     assert status_response.status_code == 200
     assert "lightning_runtime" in status_response.json()
     assert datasets_response.status_code == 200
     assert any(dataset["key"] == "medmcqa" for dataset in datasets_response.json()["datasets"])
+    assert presets_response.status_code == 200
+    assert any(preset["key"] == "rare_disease_lab" for preset in presets_response.json()["presets"])
 
 
 def test_research_benchmark_and_experiment_endpoints(monkeypatch) -> None:
@@ -185,6 +188,7 @@ def test_research_benchmark_and_experiment_endpoints(monkeypatch) -> None:
 
     benchmark_response = client.post("/api/research/benchmark/dataset", json={"dataset_key": "medmcqa", "limit": 1})
     rollout_response = client.post("/api/research/rollout/dataset", json={"dataset_key": "medmcqa", "train_limit": 1, "validation_limit": 1})
+    preset_rollout_response = client.post("/api/research/rollout/preset", json={"preset_key": "core_diagnostic_lab"})
     list_response = client.get("/api/research/experiments")
     compare_response = client.post(
         "/api/research/experiments/compare",
@@ -195,7 +199,9 @@ def test_research_benchmark_and_experiment_endpoints(monkeypatch) -> None:
     assert benchmark_response.json()["summary"]["top1_differential_recall"] == 1.0
     assert rollout_response.status_code == 200
     assert rollout_response.json()["experiment"]["experiment_id"] == "exp_new"
+    assert preset_rollout_response.status_code == 200
     assert list_response.status_code == 200
     assert len(list_response.json()["experiments"]) == 2
     assert compare_response.status_code == 200
     assert compare_response.json()["comparison"]["delta_mean_reward"] > 0
+    assert compare_response.json()["comparison"]["promotion_gate"]["verdict"] in {"promote", "hold", "reject"}

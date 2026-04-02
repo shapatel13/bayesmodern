@@ -78,3 +78,5 @@ def test_compare_experiment_summaries_marks_promotions_and_regressions(tmp_path:
     assert "mean_reward" in comparison.promoted_dimensions
     assert "unsafe_recommendation_rate" in comparison.promoted_dimensions
     assert comparison.regressed_dimensions == []
+    assert comparison.promotion_gate is not None
+    assert comparison.promotion_gate.verdict == "promote"

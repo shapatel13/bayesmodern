@@ -44,6 +44,17 @@ class ExperimentComparison(BaseModel):
     delta_brier_score: float
     delta_expected_calibration_error: float
     delta_log_loss: float
+    delta_medication_recall: float = 0.0
+    delta_adverse_event_recall: float = 0.0
+    promoted_dimensions: list[str]
+    regressed_dimensions: list[str]
+    promotion_gate: "PromotionGateDecision | None" = None
+
+
+class PromotionGateDecision(BaseModel):
+    verdict: Literal["promote", "hold", "reject"]
+    blockers: list[str]
+    rationale: list[str]
     promoted_dimensions: list[str]
     regressed_dimensions: list[str]
 
@@ -178,7 +189,27 @@ def compare_experiment_summaries(
     if regressed:
         regressed_dimensions.append("log_loss")
 
-    return ExperimentComparison(
+    delta_medication_recall, promoted, regressed = _metric_delta(
+        baseline.benchmark_summary.medication_recall,
+        candidate.benchmark_summary.medication_recall,
+        preferred_direction="higher",
+    )
+    if promoted:
+        promoted_dimensions.append("medication_recall")
+    if regressed:
+        regressed_dimensions.append("medication_recall")
+
+    delta_adverse_event_recall, promoted, regressed = _metric_delta(
+        baseline.benchmark_summary.adverse_event_recall,
+        candidate.benchmark_summary.adverse_event_recall,
+        preferred_direction="higher",
+    )
+    if promoted:
+        promoted_dimensions.append("adverse_event_recall")
+    if regressed:
+        regressed_dimensions.append("adverse_event_recall")
+
+    comparison = ExperimentComparison(
         baseline_experiment_id=baseline.experiment_id,
         candidate_experiment_id=candidate.experiment_id,
         delta_mean_reward=delta_mean_reward,
@@ -189,6 +220,64 @@ def compare_experiment_summaries(
         delta_brier_score=delta_brier,
         delta_expected_calibration_error=delta_ece,
         delta_log_loss=delta_log_loss,
+        delta_medication_recall=delta_medication_recall,
+        delta_adverse_event_recall=delta_adverse_event_recall,
         promoted_dimensions=promoted_dimensions,
         regressed_dimensions=regressed_dimensions,
+    )
+    comparison.promotion_gate = evaluate_promotion_gate(baseline, candidate, comparison)
+    return comparison
+
+
+def evaluate_promotion_gate(
+    baseline: ExperimentSummary,
+    candidate: ExperimentSummary,
+    comparison: ExperimentComparison,
+) -> PromotionGateDecision:
+    blockers: list[str] = []
+    rationale: list[str] = []
+
+    if candidate.benchmark_summary.unsafe_recommendation_rate > baseline.benchmark_summary.unsafe_recommendation_rate:
+        blockers.append("unsafe recommendation rate regressed")
+    if candidate.benchmark_summary.contradiction_rate > baseline.benchmark_summary.contradiction_rate:
+        blockers.append("contradiction rate regressed")
+    if candidate.benchmark_summary.unsupported_claim_rate > baseline.benchmark_summary.unsupported_claim_rate:
+        blockers.append("unsupported claim rate regressed")
+    if candidate.benchmark_summary.hard_veto_count > baseline.benchmark_summary.hard_veto_count:
+        blockers.append("hard safety veto count regressed")
+
+    if candidate.task_family == "triage" and candidate.benchmark_summary.urgency_accuracy < baseline.benchmark_summary.urgency_accuracy:
+        blockers.append("triage accuracy regressed")
+    if candidate.task_family == "medication_safety":
+        if candidate.benchmark_summary.medication_recall < baseline.benchmark_summary.medication_recall:
+            blockers.append("medication extraction recall regressed")
+        if candidate.benchmark_summary.adverse_event_recall < baseline.benchmark_summary.adverse_event_recall:
+            blockers.append("adverse-event recall regressed")
+
+    if comparison.delta_mean_reward > 0:
+        rationale.append("mean reward improved")
+    if comparison.delta_top1_differential_recall > 0:
+        rationale.append("top-1 differential recall improved")
+    if comparison.delta_next_best_test_hit_rate > 0:
+        rationale.append("next-best-test hit rate improved")
+    if comparison.delta_medication_recall > 0:
+        rationale.append("medication extraction recall improved")
+    if comparison.delta_adverse_event_recall > 0:
+        rationale.append("adverse-event recall improved")
+    if comparison.delta_unsafe_recommendation_rate < 0:
+        rationale.append("unsafe recommendation rate decreased")
+
+    if blockers:
+        verdict: Literal["promote", "hold", "reject"] = "reject"
+    elif rationale:
+        verdict = "promote"
+    else:
+        verdict = "hold"
+
+    return PromotionGateDecision(
+        verdict=verdict,
+        blockers=blockers,
+        rationale=rationale,
+        promoted_dimensions=comparison.promoted_dimensions,
+        regressed_dimensions=comparison.regressed_dimensions,
     )

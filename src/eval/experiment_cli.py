@@ -8,6 +8,7 @@ from agent.lightning_adapter import detect_lightning_runtime
 from agent.offline_rollout import run_dataset_offline_experiment
 from datasets.catalog import list_dataset_specs
 from eval.experiment_registry import compare_experiment_summaries, list_experiment_summaries
+from eval.presets import get_research_preset, list_research_presets
 from utils.config import get_settings
 from utils.jsonx import dumps_pretty
 
@@ -21,6 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("status", help="Show dataset catalog size and Microsoft Agent Lightning runtime status.")
     subparsers.add_parser("list-experiments", help="List recorded offline experiments.")
+    subparsers.add_parser("list-presets", help="List named specialty benchmark presets.")
 
     rollout = subparsers.add_parser("run-dataset-rollout", help="Run an offline dataset rollout and export artifacts.")
     rollout.add_argument("dataset_key")
@@ -37,6 +39,10 @@ def build_parser() -> argparse.ArgumentParser:
     compare.add_argument("baseline_experiment_id")
     compare.add_argument("candidate_experiment_id")
     compare.add_argument("--artifacts-root", default=str(DEFAULT_ARTIFACTS_ROOT))
+
+    preset = subparsers.add_parser("run-preset-rollout", help="Run an offline rollout using a named research preset.")
+    preset.add_argument("preset_key")
+    preset.add_argument("--artifacts-root", default=str(DEFAULT_ARTIFACTS_ROOT))
 
     return parser
 
@@ -57,6 +63,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         payload = {
             "dataset_count": len(list_dataset_specs()),
             "datasets": [spec.key for spec in list_dataset_specs()],
+            "preset_count": len(list_research_presets()),
+            "presets": [preset.key for preset in list_research_presets()],
             "lightning_runtime": detect_lightning_runtime(settings).model_dump(),
             "artifacts_root": str(DEFAULT_ARTIFACTS_ROOT),
         }
@@ -67,6 +75,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "list-experiments":
         payload = [summary.model_dump() for summary in list_experiment_summaries(artifacts_root)]
+        print(dumps_pretty(payload))
+        return 0
+
+    if args.command == "list-presets":
+        payload = [preset.__dict__ for preset in list_research_presets()]
         print(dumps_pretty(payload))
         return 0
 
@@ -84,6 +97,26 @@ def main(argv: Sequence[str] | None = None) -> int:
             policy_version=args.policy_version,
         )
         payload = {
+            "experiment": experiment.model_dump(),
+            "report": report,
+        }
+        print(dumps_pretty(payload))
+        return 0
+
+    if args.command == "run-preset-rollout":
+        preset = get_research_preset(args.preset_key)
+        experiment, _traces, report = run_dataset_offline_experiment(
+            preset.dataset_key,
+            artifacts_root,
+            subset=preset.subset,
+            train_limit=preset.train_limit,
+            validation_limit=preset.validation_limit,
+            settings=settings,
+            prompt_version=preset.prompt_version,
+            policy_version=preset.policy_version,
+        )
+        payload = {
+            "preset": preset.__dict__,
             "experiment": experiment.model_dump(),
             "report": report,
         }

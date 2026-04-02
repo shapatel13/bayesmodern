@@ -4,7 +4,8 @@ from pydantic import BaseModel, Field
 
 from agent.lightning_adapter import LightningRuntimeStatus
 from eval.benchmark_runner import BenchmarkMetricsSummary
-from eval.experiment_registry import ExperimentComparison, ExperimentSummary
+from eval.experiment_registry import ExperimentComparison, ExperimentSummary, PromotionGateDecision
+from eval.presets import ResearchPreset
 
 
 class DatasetCatalogItem(BaseModel):
@@ -29,6 +30,26 @@ class ResearchStatusResponse(BaseModel):
 
 class DatasetCatalogResponse(BaseModel):
     datasets: list[DatasetCatalogItem]
+
+
+class ResearchPresetItem(BaseModel):
+    key: str
+    label: str
+    dataset_key: str
+    description: str
+    clinical_mode: str
+    task_family: str
+    train_limit: int
+    validation_limit: int
+    subset: str | None = None
+    prompt_version: str
+    policy_version: str
+    requires_credentials: bool
+    notes: str = ""
+
+
+class PresetCatalogResponse(BaseModel):
+    presets: list[ResearchPresetItem]
 
 
 class DatasetBenchmarkRequest(BaseModel):
@@ -65,6 +86,10 @@ class DatasetRolloutResponse(BaseModel):
     task_ids: list[str]
 
 
+class PresetRolloutRequest(BaseModel):
+    preset_key: str
+
+
 class ExperimentListResponse(BaseModel):
     experiments: list[ExperimentSummary]
 
@@ -76,3 +101,7 @@ class ExperimentComparisonRequest(BaseModel):
 
 class ExperimentComparisonResponse(BaseModel):
     comparison: ExperimentComparison
+
+
+class PromotionGateResponse(BaseModel):
+    decision: PromotionGateDecision
