@@ -39,6 +39,9 @@ dev = [
 datasets = [
   "datasets>=3.0.0",
 ]
+causal = [
+  "pgmpy>=0.1.25",
+]
 lightning = [
   "agentlightning",
   "datasets>=3.0.0",

@@ -93,6 +93,30 @@ def test_keyword_extraction_turns_numeric_troponin_and_ecg_language_into_finding
     assert {"ecg_ischemia", "troponin_positive", "pressure_chest_pain"} <= findings
 
 
+def test_keyword_extraction_does_not_confuse_blood_pressure_with_chest_pressure() -> None:
+    context = extract_context_from_text(
+        case_id="extract-pressure-guard-1",
+        note_text="Blood pressure 88/54 with melena and dyspnea but no chest pain.",
+        settings=Settings(_env_file=None, allow_live_llm=False),
+    )
+    findings = {finding.key for finding in context.findings}
+
+    assert "hemodynamic_instability" in findings
+    assert "pressure_chest_pain" not in findings
+
+
+def test_keyword_extraction_parses_diuretic_and_low_ef_clues() -> None:
+    context = extract_context_from_text(
+        case_id="extract-hf-1",
+        note_text="Patient on torsemide with EF 30% and reduced LV systolic function.",
+        settings=Settings(_env_file=None, allow_live_llm=False),
+    )
+    findings = {finding.key for finding in context.findings}
+
+    assert "torsemide" in context.medications
+    assert "reduced_ef" in findings
+
+
 def test_extraction_falls_back_when_openai_parse_raises(monkeypatch) -> None:
     from llm import extraction
 

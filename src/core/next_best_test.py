@@ -10,8 +10,10 @@ from core.risk import compute_test_risk_penalty
 def _contextual_test_multiplier(test: CandidateTest, context: ClinicalDecisionContext) -> float:
     present_keys = {finding.key for finding in context.findings if finding.present}
     acs_supportive_context = bool(
-        present_keys & {"pressure_chest_pain", "pain_radiation", "diaphoresis", "troponin_positive"}
-    ) or context.hemodynamic_instability
+        present_keys & {"pressure_chest_pain", "pain_radiation", "diaphoresis", "troponin_positive", "ecg_ischemia"}
+    )
+    high_acuity_context = context.hemodynamic_instability or context.critical_values_present
+    mechanism_clarifier = test.slug in {"bedside_echo", "plr_lvot_vti"} or len(test.target_states) >= 3
     bleeding_supportive_context = bool(
         present_keys & {"anticoagulated", "active_gi_bleeding", "melena", "symptomatic_anemia"}
     ) or bool(
@@ -22,14 +24,16 @@ def _contextual_test_multiplier(test: CandidateTest, context: ClinicalDecisionCo
     )
     if "acs" in test.target_diagnoses:
         if bleeding_supportive_context and not acs_supportive_context:
-            return 0.35
-        return 1.35 if acs_supportive_context else 0.7
+            return 0.85 if mechanism_clarifier else 0.35
+        if acs_supportive_context:
+            return 1.35
+        return 0.82 if high_acuity_context else 0.7
     if "upper_gi_bleed" in test.target_diagnoses:
         return 1.45 if bleeding_supportive_context else 0.8
     if acs_supportive_context and not bleeding_supportive_context and set(test.target_diagnoses) & {"pe", "pneumonia"}:
         return 0.45
     if bleeding_supportive_context and set(test.target_diagnoses) & {"pe", "pneumonia", "heart_failure", "acs"}:
-        return 0.45
+        return 0.9 if mechanism_clarifier else 0.45
     return 1.0
 
 
@@ -92,6 +96,45 @@ def _discrimination_gain(current_differential: dict[str, float], test: Candidate
     if first_lr is None or second_lr is None:
         return 0.0
     return abs(first_lr.positive_lr - second_lr.positive_lr) + abs(first_lr.negative_lr - second_lr.negative_lr)
+
+
+def _mechanistic_clarifier_multiplier(
+    test: CandidateTest,
+    context: ClinicalDecisionContext,
+    mechanism_map: dict[str, float],
+    target_diagnosis_posterior: float,
+) -> float:
+    medications = {item.strip().lower() for item in context.medications}
+    present_keys = {finding.key for finding in context.findings if finding.present}
+    hemorrhage_signal = mechanism_map.get("hemorrhagic_tendency_active_blood_loss", 0.0)
+    low_eav_signal = mechanism_map.get("low_effective_arterial_volume", 0.0)
+    congestion_signal = mechanism_map.get("venous_congestion", 0.0)
+    cardiogenic_signal = mechanism_map.get("impaired_contractility", 0.0)
+    fluid_intolerance_signal = mechanism_map.get("fluid_intolerance", 0.0)
+    ischemic_signal = mechanism_map.get("thrombotic_ischemic_tendency", 0.0)
+    anticoagulated = bool(
+        {"warfarin", "heparin", "apixaban", "rivaroxaban", "dabigatran", "enoxaparin"} & medications
+    ) or "anticoagulated" in present_keys
+    mixed_cardiorenal_bleeding = (
+        hemorrhage_signal >= 0.7
+        and congestion_signal >= 0.7
+        and (cardiogenic_signal >= 0.5 or fluid_intolerance_signal >= 0.45)
+    )
+
+    multiplier = 1.0
+    if test.slug == "repeat_hemoglobin" and hemorrhage_signal >= 0.7 and low_eav_signal >= 0.65:
+        multiplier *= 1.45
+    if test.slug == "type_screen" and hemorrhage_signal >= 0.82 and context.hemodynamic_instability:
+        multiplier *= 1.2
+    if test.slug == "bedside_echo" and congestion_signal >= 0.68 and cardiogenic_signal >= 0.5:
+        multiplier *= 2.1 if context.hemodynamic_instability else 1.45
+    if test.slug == "plr_lvot_vti" and congestion_signal >= 0.62 and low_eav_signal >= 0.55:
+        multiplier *= 1.4
+    if mixed_cardiorenal_bleeding and test.slug == "pt_inr" and anticoagulated:
+        multiplier *= 0.52
+    if test.slug in {"ecg", "hs_troponin"} and target_diagnosis_posterior < 0.12 and ischemic_signal < 0.45:
+        multiplier *= 0.55
+    return multiplier
 
 
 class NextBestTestEngine:
@@ -184,13 +227,6 @@ class NextBestTestEngine:
             average_lr_minus = sum(target_lrs_minus) / max(len(target_lrs_minus), 1)
             risk_penalty = compute_test_risk_penalty(test, context)
             cost_penalty = (test.direct_cost + test.downstream_cost) / 1_000.0
-            evidence_value = (
-                (info_gain * resolved_policy.next_test.movement_weight)
-                + (entropy_gain * resolved_policy.next_test.entropy_weight)
-                + (discrimination_gain * 0.05 * resolved_policy.next_test.discrimination_weight)
-                + (threshold_gain * 0.1 * resolved_policy.next_test.threshold_weight)
-                + (mechanistic_info_gain * 0.85)
-            )
             urgency_bonus = 1.0 + (
                 resolved_policy.next_test.urgency_bonus_weight
                 if context.hemodynamic_instability or context.critical_values_present
@@ -208,12 +244,26 @@ class NextBestTestEngine:
                 (current_differential.get(diagnosis, 0.0) for diagnosis in test.target_diagnoses),
                 default=0.0,
             )
+            weighted_threshold_gain = threshold_gain * max(target_diagnosis_posterior, 0.12)
             diagnosis_alignment_multiplier = 0.7 + min(target_diagnosis_posterior, 0.6)
             mechanism_alignment_multiplier = 1.0
             if mechanistic_uncertainty_signals:
                 mechanism_alignment_multiplier += 0.45 * (
                     sum(mechanistic_uncertainty_signals) / len(mechanistic_uncertainty_signals)
                 )
+            mechanistic_clarifier_multiplier = _mechanistic_clarifier_multiplier(
+                test,
+                context,
+                mechanism_map,
+                target_diagnosis_posterior,
+            )
+            evidence_value = (
+                (info_gain * resolved_policy.next_test.movement_weight)
+                + (entropy_gain * resolved_policy.next_test.entropy_weight)
+                + (discrimination_gain * 0.05 * resolved_policy.next_test.discrimination_weight)
+                + (weighted_threshold_gain * 0.1 * resolved_policy.next_test.threshold_weight)
+                + (mechanistic_info_gain * 0.85)
+            )
             stewardship_score = max(
                 0.0,
                 (
@@ -223,6 +273,7 @@ class NextBestTestEngine:
                     * diagnosis_focus_multiplier
                     * diagnosis_alignment_multiplier
                     * mechanism_alignment_multiplier
+                    * mechanistic_clarifier_multiplier
                     * _contextual_test_multiplier(test, context)
                     * low_signal_multiplier
                 )
@@ -257,7 +308,7 @@ class NextBestTestEngine:
                     target_states=test.target_states,
                     rationale=(
                         f"{note_prefix}{mechanism_prefix}Expected movement {info_gain:.3f}; entropy gain {entropy_gain:.3f}; "
-                        f"mechanistic gain {mechanistic_info_gain:.3f}; threshold gain {threshold_gain:.3f}; discrimination gain {discrimination_gain:.3f}. "
+                        f"mechanistic gain {mechanistic_info_gain:.3f}; threshold gain {weighted_threshold_gain:.3f}; discrimination gain {discrimination_gain:.3f}. "
                         f"stewardship score {stewardship_score:.3f}. "
                         f"{'Low-signal case: recommendation confidence is reduced. ' if low_signal_multiplier < 1.0 else ''}"
                         f"Risk penalties: {', '.join(risk_penalty.reasons) if risk_penalty.reasons else 'low.'}"

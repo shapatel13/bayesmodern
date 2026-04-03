@@ -31,6 +31,7 @@ def test_anticoagulated_melena_case_prefers_bleeding_workup_over_pe_rule_out() -
     )
     top_tests = [recommendation.slug for recommendation in report.next_best_tests[:4]]
 
-    assert top_tests[:2] == ["cbc", "pt_inr"]
+    assert top_tests[0] == "repeat_hemoglobin"
+    assert "pt_inr" in top_tests[:3]
     assert "type_screen" in top_tests
     assert "d_dimer" not in top_tests

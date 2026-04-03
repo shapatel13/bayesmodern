@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     trace_retention_days: int = Field(default=30, alias="PRIORI_TRACE_RETENTION_DAYS")
     seed: int = Field(default=17, alias="PRIORI_SEED")
     experiment_namespace: str = Field(default="local-dev", alias="PRIORI_EXPERIMENT_NAMESPACE")
+    mechanism_dag_enabled: bool = Field(default=True, alias="PRIORI_MECHANISM_DAG_ENABLED")
     open_world_reasoning_enabled: bool = Field(default=True, alias="PRIORI_OPEN_WORLD_REASONING_ENABLED")
     open_world_expand_uncertain_only: bool = Field(default=True, alias="PRIORI_OPEN_WORLD_EXPAND_UNCERTAIN_ONLY")
     open_world_max_hypotheses: int = Field(default=6, alias="PRIORI_OPEN_WORLD_MAX_HYPOTHESES")

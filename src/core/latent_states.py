@@ -7,6 +7,7 @@ import numpy as np
 
 from core.bayes import bayes_update
 from core.calibration import classify_calibration
+from core.mechanism_dag import infer_mechanism_dag_refinement
 from core.models import (
     ClinicalDecisionContext,
     ClinicalFinding,
@@ -188,6 +189,26 @@ def _sample_state_posterior(
 def _summary(ranked: list[MechanismStateEstimate]) -> tuple[list[str], bool, str]:
     if not ranked:
         return [], False, "Mechanism layer unavailable."
+    mechanism_map = {estimate.slug: estimate.posterior for estimate in ranked}
+    if (
+        mechanism_map.get("venous_congestion", 0.0) >= 0.7
+        and mechanism_map.get("impaired_contractility", 0.0) >= 0.55
+    ):
+        summary = "Mixed cardiogenic and congestive physiology"
+        if mechanism_map.get("fluid_intolerance", 0.0) >= 0.45:
+            summary += " with high fluid intolerance"
+        if (
+            mechanism_map.get("hemorrhagic_tendency_active_blood_loss", 0.0) >= 0.7
+            and mechanism_map.get("low_effective_arterial_volume", 0.0) >= 0.65
+        ):
+            summary += "; active blood loss is also materially worsening low effective arterial volume"
+        if mechanism_map.get("medication_toxicity_effect", 0.0) >= 0.5:
+            summary += "; medication-associated renal stress is likely contributing"
+        return [
+            "Venous Congestion",
+            "Impaired Contractility / Cardiogenic Physiology",
+            "Hemorrhagic Tendency / Active Blood Loss",
+        ], True, f"{summary}."
     active = [estimate.name for estimate in ranked if estimate.posterior >= 0.55][:3]
     mixed = len(active) >= 2
     if mixed:
@@ -198,6 +219,77 @@ def _summary(ranked: list[MechanismStateEstimate]) -> tuple[list[str], bool, str
     return top_two, False, f"Mechanism layer remains broad; strongest signals are {' and '.join(top_two)}."
 
 
+def _blend_with_dag_refinement(
+    estimates: list[MechanismStateEstimate],
+    context: ClinicalDecisionContext,
+    *,
+    enabled: bool,
+) -> tuple[list[MechanismStateEstimate], str | None]:
+    if not enabled:
+        return estimates, None
+
+    dag_refinement = infer_mechanism_dag_refinement(context)
+    if dag_refinement is None:
+        return estimates, None
+
+    refined_estimates: list[MechanismStateEstimate] = []
+    for estimate in estimates:
+        dag_posterior = dag_refinement.state_posteriors.get(estimate.slug)
+        if dag_posterior is None:
+            refined_estimates.append(estimate)
+            continue
+
+        blended_posterior = (
+            estimate.posterior * (1.0 - dag_refinement.blend_weight)
+            + dag_posterior * dag_refinement.blend_weight
+        )
+        dag_low = max(0.0, dag_posterior - dag_refinement.interval_radius)
+        dag_high = min(1.0, dag_posterior + dag_refinement.interval_radius)
+        blended_low = (
+            estimate.interval_low * (1.0 - dag_refinement.blend_weight)
+            + dag_low * dag_refinement.blend_weight
+        )
+        blended_high = (
+            estimate.interval_high * (1.0 - dag_refinement.blend_weight)
+            + dag_high * dag_refinement.blend_weight
+        )
+        refinement_delta = dag_posterior - estimate.posterior
+        contribution = FindingContribution(
+            finding_key=f"dag_refinement_{estimate.slug}",
+            label="Causal DAG refinement",
+            direction="for" if refinement_delta >= 0 else "against",
+            applied_lr=max(0.5, min(3.0, 1.0 + abs(refinement_delta) * 2.5)),
+            rationale=dag_refinement.note,
+            provenance_refs=["dag:cardiorenal_hemorrhage_v1"],
+            source_type="hard_coded",
+        )
+        evidence_for = list(estimate.evidence_for)
+        evidence_against = list(estimate.evidence_against)
+        if abs(refinement_delta) >= 0.03:
+            if refinement_delta >= 0:
+                evidence_for.append(contribution)
+            else:
+                evidence_against.append(contribution)
+        refined_estimates.append(
+            estimate.model_copy(
+                update={
+                    "posterior": blended_posterior,
+                    "interval_low": blended_low,
+                    "interval_high": blended_high,
+                    "evidence_for": evidence_for,
+                    "evidence_against": evidence_against,
+                    "confidence_state": classify_calibration(blended_posterior, blended_high - blended_low),
+                    "provenance_badges": sorted(
+                        set([*estimate.provenance_badges, *dag_refinement.provenance_badges])
+                    ),
+                }
+            )
+        )
+
+    refined_estimates.sort(key=lambda item: item.posterior, reverse=True)
+    return refined_estimates, dag_refinement.note
+
+
 class LatentStateEngine:
     def infer(
         self,
@@ -206,6 +298,7 @@ class LatentStateEngine:
         definitions: Mapping[str, LatentStateDefinition] | None = None,
         samples: int = 400,
         seed: int = 17,
+        enable_dag_refinement: bool = True,
     ) -> MechanismStateResult:
         state_definitions = definitions or LATENT_STATE_CATALOG
         findings_by_key = _findings_map(context)
@@ -238,12 +331,19 @@ class LatentStateEngine:
             )
 
         estimates.sort(key=lambda item: item.posterior, reverse=True)
+        estimates, dag_note = _blend_with_dag_refinement(
+            estimates,
+            context,
+            enabled=enable_dag_refinement,
+        )
         active_states, mixed_physiology, summary = _summary(estimates)
         return MechanismStateResult(
             ranked=estimates,
             active_states=active_states,
             mixed_physiology=mixed_physiology,
             summary=summary,
-            model_note="Independent deterministic latent-state updates with soft-evidence weighting and Monte Carlo uncertainty.",
+            model_note=(
+                "Independent deterministic latent-state updates with soft-evidence weighting and Monte Carlo uncertainty."
+                f"{' ' + dag_note if dag_note else ''}"
+            ),
         )
-

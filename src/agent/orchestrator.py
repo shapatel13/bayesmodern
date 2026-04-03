@@ -134,6 +134,7 @@ class PRIORIXOrchestrator:
         mechanism_result = self.mechanism_engine.infer(
             context,
             seed=self.settings.seed,
+            enable_dag_refinement=self.settings.mechanism_dag_enabled,
         )
         coupled_hypotheses = apply_mechanism_coupling(base_hypotheses, mechanism_result)
         base_differential = self.differential_engine.rank(
@@ -166,6 +167,7 @@ class PRIORIXOrchestrator:
             mechanism_result = self.mechanism_engine.infer(
                 context,
                 seed=self.settings.seed,
+                enable_dag_refinement=self.settings.mechanism_dag_enabled,
             )
             hypotheses = apply_mechanism_coupling(
                 merge_open_world_hypotheses(

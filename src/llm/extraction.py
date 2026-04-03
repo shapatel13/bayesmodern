@@ -27,6 +27,8 @@ KEYWORD_FINDINGS: dict[str, tuple[str, str]] = {
     "oliguria": ("oliguria", "Oliguria"),
     "reduced ef": ("reduced_ef", "Reduced ejection fraction"),
     "low ejection fraction": ("reduced_ef", "Reduced ejection fraction"),
+    "reduced systolic function": ("reduced_ef", "Reduced ejection fraction"),
+    "reduced lv systolic function": ("reduced_ef", "Reduced ejection fraction"),
     "rv strain": ("rv_strain", "RV strain"),
     "ischemic changes": ("ecg_ischemia", "Ischemic ECG changes"),
     "st elevation": ("ecg_ischemia", "Ischemic ECG changes"),
@@ -39,12 +41,17 @@ KEYWORD_FINDINGS: dict[str, tuple[str, str]] = {
     "elevated lactate": ("elevated_lactate", "Elevated lactate"),
     "supratherapeutic inr": ("supratherapeutic_inr", "Supratherapeutic INR"),
     "high inr": ("supratherapeutic_inr", "Supratherapeutic INR"),
-    "pressure": ("pressure_chest_pain", "Pressure-like chest pain"),
+    "chest pressure": ("pressure_chest_pain", "Pressure-like chest pain"),
+    "substernal pressure": ("pressure_chest_pain", "Pressure-like chest pain"),
+    "heavy pressure": ("pressure_chest_pain", "Pressure-like chest pain"),
+    "pressure-like chest pain": ("pressure_chest_pain", "Pressure-like chest pain"),
     "crushing chest pain": ("pressure_chest_pain", "Pressure-like chest pain"),
     "crushing pain": ("pressure_chest_pain", "Pressure-like chest pain"),
     "substernal": ("pressure_chest_pain", "Pressure-like chest pain"),
     "tightness": ("pressure_chest_pain", "Pressure-like chest pain"),
     "chest heaviness": ("pressure_chest_pain", "Pressure-like chest pain"),
+    "b-lines": ("crackles", "Pulmonary edema signal"),
+    "b lines": ("crackles", "Pulmonary edema signal"),
     "troponin": ("troponin_positive", "Positive troponin"),
     "diaphor": ("diaphoresis", "Diaphoresis"),
     "sweating": ("diaphoresis", "Diaphoresis"),
@@ -79,6 +86,9 @@ KEYWORD_MEDICATIONS: dict[str, str] = {
     "amiodarone": "amiodarone",
     "ibuprofen": "ibuprofen",
     "naproxen": "naproxen",
+    "torsemide": "torsemide",
+    "furosemide": "furosemide",
+    "bumetanide": "bumetanide",
 }
 
 KEYWORD_ADVERSE_EVENTS: dict[str, str] = {
@@ -132,6 +142,7 @@ LACTATE_PATTERN = re.compile(r"\b(?:lactate)\s*(?:is|was|of|:)?\s*(\d{1,2}(?:\.\
 SODIUM_PATTERN = re.compile(r"\b(?:sodium|na)\s*(?:is|was|of|:)?\s*(\d{2,3}(?:\.\d+)?)\b")
 BNP_PATTERN = re.compile(r"\b(?:bnp|nt-probnp)\s*(?:is|was|of|:)?\s*(\d{2,6}(?:\.\d+)?)\b")
 TROPONIN_PATTERN = re.compile(r"\b(?:troponin|hs troponin|high-sensitivity troponin)\s*(?:is|was|of|:)?\s*(\d+(?:\.\d+)?)\b")
+EF_PATTERN = re.compile(r"\bef\s*(?:is|was|of|=|:)?\s*(\d{1,2})\s*%")
 
 
 def _append_if_missing(findings: list[ClinicalFinding], key: str, label: str, *, source_type: str = "user_supplied") -> None:
@@ -385,6 +396,20 @@ def _extract_numeric_findings(note_text: str) -> tuple[dict[str, ClinicalFinding
                 value=bnp,
                 units="pg/mL",
                 note=f"BNP/NT-proBNP {bnp:.0f}",
+            )
+
+    if match := EF_PATTERN.search(lowered):
+        ef_percent = float(match.group(1))
+        numeric_values["ejection_fraction_percent"] = ef_percent
+        units["ejection_fraction_percent"] = "%"
+        if ef_percent <= 40:
+            _upsert_numeric_finding(
+                findings,
+                key="reduced_ef",
+                label="Reduced ejection fraction",
+                value=ef_percent,
+                units="%",
+                note=f"Ejection fraction {ef_percent:.0f}%",
             )
 
     if match := TROPONIN_PATTERN.search(lowered):
