@@ -12,6 +12,7 @@ from utils.ids import make_id
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_REVIEWED_CASES_PATH = _REPO_ROOT / "artifacts" / "reviewed_cases" / "reviewed_cases.local.jsonl"
+VALID_REVIEW_STATUSES: tuple[str, ...] = ("approved", "draft")
 REVIEWED_CASE_TAGS: tuple[str, ...] = (
     "wrong_top_diagnosis",
     "bad_next_test",
@@ -109,6 +110,42 @@ def append_reviewed_case(row: dict[str, Any], settings: Settings | None = None) 
         handle.write(json.dumps(row, ensure_ascii=True))
         handle.write("\n")
     return destination
+
+
+def update_reviewed_case_status(
+    case_id: str,
+    review_status: str,
+    settings: Settings | None = None,
+) -> dict[str, Any]:
+    normalized_status = str(review_status or "").strip().lower()
+    if normalized_status not in VALID_REVIEW_STATUSES:
+        raise ValueError(f"Unsupported review status: {review_status}")
+
+    destination = resolve_reviewed_cases_destination(settings)
+    if not destination.exists():
+        raise FileNotFoundError(f"Reviewed case store not found: {destination}")
+
+    rows: list[dict[str, Any]] = []
+    updated_row: dict[str, Any] | None = None
+    with destination.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            payload = line.strip()
+            if not payload:
+                continue
+            row = json.loads(payload)
+            if str(row.get("id") or "").strip() == case_id:
+                row["review_status"] = normalized_status
+                updated_row = row
+            rows.append(row)
+
+    if updated_row is None:
+        raise KeyError(f"Reviewed case `{case_id}` was not found.")
+
+    with destination.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, ensure_ascii=True))
+            handle.write("\n")
+    return updated_row
 
 
 def load_reviewed_cases(settings: Settings | None = None, *, limit: int | None = None) -> list[dict[str, Any]]:

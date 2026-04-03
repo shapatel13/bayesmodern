@@ -87,3 +87,24 @@ def test_reviewed_case_store_summarizes_rows(tmp_path) -> None:
     assert summary["tag_counts"]["parser_miss"] == 1
     assert summary["tag_counts"]["wrong_top_diagnosis"] == 1
     assert summary["recent_rows"][0]["gold_diagnosis"] == "pneumonia"
+
+
+def test_reviewed_case_store_updates_status(tmp_path) -> None:
+    settings = Settings(_env_file=None, reviewed_cases_path=str(tmp_path / "reviewed_cases.local.jsonl"))
+    row = reviewed_case_store.build_reviewed_case_row(
+        note_text="Fever and crackles.",
+        gold_diagnosis="pneumonia",
+        acceptable_tests=["cxr"],
+        gold_triage="expedited",
+        review_status="draft",
+        reviewer_id="tester",
+        review_notes="Draft case.",
+    )
+    reviewed_case_store.append_reviewed_case(row, settings)
+
+    updated = reviewed_case_store.update_reviewed_case_status(row["id"], "approved", settings)
+    summary = reviewed_case_store.summarize_reviewed_cases(settings)
+
+    assert updated["review_status"] == "approved"
+    assert summary["approved_cases"] == 1
+    assert summary["draft_cases"] == 0

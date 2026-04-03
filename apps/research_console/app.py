@@ -32,6 +32,7 @@ from datasets.reviewed_case_store import (
     load_reviewed_cases,
     resolve_reviewed_cases_destination,
     summarize_reviewed_cases,
+    update_reviewed_case_status,
 )
 from eval.experiment_registry import compare_experiment_summaries, list_experiment_summaries
 from eval.presets import get_research_preset, list_research_presets
@@ -123,6 +124,7 @@ def main() -> None:
     reviewed_cases_destination = resolve_reviewed_cases_destination(settings)
     reviewed_cases_summary = summarize_reviewed_cases(settings)
     reviewed_recent_rows = load_reviewed_cases(settings, limit=5)
+    reviewed_manage_rows = load_reviewed_cases(settings, limit=50)
     research_presets = list_research_presets()
     experiment_summaries = list_experiment_summaries(EXPERIMENTS_ROOT)
     api_base_url = os.environ.get("PRIORI_API_BASE_URL")
@@ -629,6 +631,7 @@ def main() -> None:
     inbox_col_3.metric("Draft", reviewed_cases_summary["draft_cases"])
     inbox_col_4.metric("Tagged", reviewed_cases_summary["tagged_cases"])
     st.caption(f"Local reviewed-case inbox: `{reviewed_cases_destination}`")
+    st.caption("`approved` rows are eligible for offline improvement. `draft` rows are saved but excluded from training.")
     st.caption(f"Top review tags: {_format_tag_counts(reviewed_cases_summary['tag_counts'])}")
     if reviewed_recent_rows:
         inbox_table = pd.DataFrame(
@@ -647,6 +650,64 @@ def main() -> None:
         st.dataframe(inbox_table, use_container_width=True, hide_index=True)
     else:
         st.info("No local reviewed cases saved yet. Use `Save This Case To Reviewed Cases` after a run.")
+
+    if reviewed_manage_rows:
+        st.markdown("#### Inbox Controls")
+        selected_inbox_case_id = st.selectbox(
+            "Saved Case",
+            [str(row.get("id")) for row in reviewed_manage_rows],
+            format_func=lambda case_id: next(
+                (
+                    f"{row.get('id')} | {row.get('review_status')} | {row.get('gold_triage') or 'no triage'} | "
+                    f"{(row.get('gold_diagnosis') or row.get('mechanism_feedback_summary') or 'reviewed case')[:70]}"
+                    for row in reviewed_manage_rows
+                    if str(row.get("id")) == case_id
+                ),
+                case_id,
+            ),
+            key="reviewed_case_inbox_selector",
+        )
+        selected_inbox_case = next(
+            (row for row in reviewed_manage_rows if str(row.get("id")) == selected_inbox_case_id),
+            None,
+        )
+        if selected_inbox_case:
+            inbox_manage_col_1, inbox_manage_col_2 = st.columns([1.2, 1])
+            inbox_manage_col_1.json(
+                {
+                    "id": selected_inbox_case.get("id"),
+                    "review_status": selected_inbox_case.get("review_status"),
+                    "tags": selected_inbox_case.get("tags") or [],
+                    "reviewer_id": selected_inbox_case.get("reviewer_id"),
+                    "captured_at": selected_inbox_case.get("captured_at"),
+                    "preferred_next_action": selected_inbox_case.get("preferred_next_action"),
+                }
+            )
+            inbox_manage_col_2.markdown(
+                "\n".join(
+                    [
+                        f"**Triage:** `{selected_inbox_case.get('gold_triage') or 'unknown'}`",
+                        f"**Diagnosis:** `{selected_inbox_case.get('gold_diagnosis') or 'not forced'}`",
+                        f"**Mechanisms:** `{', '.join(selected_inbox_case.get('reviewed_mechanism_states') or []) or 'none listed'}`",
+                    ]
+                )
+            )
+            inbox_action_cols = st.columns(3)
+            if inbox_action_cols[0].button("Mark Approved", use_container_width=True):
+                try:
+                    update_reviewed_case_status(selected_inbox_case_id, "approved", settings)
+                    st.success(f"Reviewed case `{selected_inbox_case_id}` is now approved.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Failed to mark case approved: {exc}")
+            if inbox_action_cols[1].button("Mark Draft", use_container_width=True):
+                try:
+                    update_reviewed_case_status(selected_inbox_case_id, "draft", settings)
+                    st.success(f"Reviewed case `{selected_inbox_case_id}` is now draft.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Failed to mark case draft: {exc}")
+            inbox_action_cols[2].caption("Use this when you want to keep a case saved but exclude it from training.")
 
     improve_inbox_left, improve_inbox_right = st.columns([1.2, 1])
     with improve_inbox_left:
@@ -673,6 +734,46 @@ def main() -> None:
                     experiment_summaries = list_experiment_summaries(EXPERIMENTS_ROOT)
                 except Exception as exc:
                     st.session_state["prompt_training_error"] = str(exc)
+
+    st.markdown("#### Self-Improvement Control Center")
+    control_col_1, control_col_2, control_col_3 = st.columns(3)
+    control_col_1.info(
+        "\n".join(
+            [
+                f"Active prompt: `{active_prompt.version}`",
+                f"Tracked prompt versions: `{len(prompt_records)}`",
+                f"Eligible approved cases: `{reviewed_cases_summary['approved_cases']}`",
+                f"Saved drafts excluded from training: `{reviewed_cases_summary['draft_cases']}`",
+            ]
+        )
+    )
+    latest_experiment = experiment_summaries[0] if experiment_summaries else None
+    if latest_experiment:
+        control_col_2.success(
+            "\n".join(
+                [
+                    f"Latest experiment: `{latest_experiment.experiment_id}`",
+                    f"Source: `{latest_experiment.dataset_key}`",
+                    f"Mean reward: `{latest_experiment.benchmark_summary.mean_reward:.3f}`",
+                    f"Top-1 recall: `{latest_experiment.benchmark_summary.top1_differential_recall:.3f}`",
+                ]
+            )
+        )
+    else:
+        control_col_2.info("No experiments recorded yet. Run a benchmark or improvement flow to populate experiment history.")
+    if lightning_runtime.native_training_ready:
+        control_col_3.success("Native Lightning training is ready in this environment.")
+    else:
+        control_col_3.warning(
+            "\n".join(
+                [
+                    f"Runtime mode: `{lightning_runtime.mode}`",
+                    lightning_runtime.reason,
+                    "You can still run offline export/eval now; native prompt training needs WSL/Linux.",
+                    "`wsl --install Ubuntu`",
+                ]
+            )
+        )
 
     st.markdown("#### Prompt Improvement")
     improvement_left, improvement_right = st.columns([1, 1.4])
