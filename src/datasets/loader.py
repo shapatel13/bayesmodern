@@ -143,6 +143,17 @@ def _apply_limit_strategy(rows: list[dict[str, object]], *, limit: int, balance_
     return selected
 
 
+def _filter_rows_for_spec(spec: BenchmarkDatasetSpec, rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    if spec.key != "reviewed_cases":
+        return rows
+    filtered: list[dict[str, object]] = []
+    for row in rows:
+        review_status = str(row.get("review_status") or "").strip().lower()
+        if review_status == "approved":
+            filtered.append(row)
+    return filtered
+
+
 def load_benchmark_tasks(
     dataset_key: str,
     *,
@@ -154,6 +165,7 @@ def load_benchmark_tasks(
     resolved_split = split or spec.default_eval_split
     resolved_subset = subset if subset is not None else spec.default_subset
     rows = _load_rows_for_spec(spec, split=resolved_split, subset=resolved_subset, limit=limit)
+    rows = _filter_rows_for_spec(spec, rows)
     tasks = [spec.adapter(row, resolved_split) for row in rows]
     return [task for task in tasks if task.prompt.strip()]
 

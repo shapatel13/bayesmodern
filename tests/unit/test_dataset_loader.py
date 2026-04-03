@@ -185,3 +185,35 @@ def test_reviewed_cases_loader_reads_local_jsonl(tmp_path, monkeypatch) -> None:
     assert pair.validation
     assert all(task.source_dataset == "reviewed_cases" for task in pair.train + pair.validation)
     assert pair.train[0].metadata["review_status"] == "approved"
+
+
+def test_reviewed_cases_loader_excludes_draft_rows(tmp_path, monkeypatch) -> None:
+    from datasets import loader
+
+    reviewed_path = tmp_path / "reviewed_cases.jsonl"
+    rows = [
+        {
+            "id": "approved-1",
+            "task_type": "diagnosis_open",
+            "prompt": "Clinical prompt approved",
+            "gold_diagnosis": "pe",
+            "acceptable_tests": ["d_dimer"],
+            "review_status": "approved",
+        },
+        {
+            "id": "draft-1",
+            "task_type": "diagnosis_open",
+            "prompt": "Clinical prompt draft",
+            "gold_diagnosis": "acs",
+            "acceptable_tests": ["ecg"],
+            "review_status": "draft",
+        },
+    ]
+    reviewed_path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
+    monkeypatch.setattr(loader, "get_settings", lambda: Settings(_env_file=None, reviewed_cases_path=str(reviewed_path)))
+
+    pair = load_train_validation_tasks("reviewed_cases", train_limit=5, validation_limit=5)
+    loaded_ids = {task.task_id for task in pair.train + pair.validation}
+
+    assert "reviewed-approved-1" in loaded_ids
+    assert "reviewed-draft-1" not in loaded_ids
