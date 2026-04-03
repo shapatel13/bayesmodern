@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     openai_verifier_model: str = Field(
         default="gpt-5.4-nano-2026-03-17", alias="PRIORI_OPENAI_VERIFIER_MODEL"
     )
+    openai_case_review_model: str = Field(
+        default="gpt-5.4", alias="PRIORI_OPENAI_CASE_REVIEW_MODEL"
+    )
     redact_traces: bool = Field(default=True, alias="PRIORI_REDACT_TRACES")
     trace_retention_days: int = Field(default=30, alias="PRIORI_TRACE_RETENTION_DAYS")
     seed: int = Field(default=17, alias="PRIORI_SEED")

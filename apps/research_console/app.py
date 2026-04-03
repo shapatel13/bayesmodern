@@ -35,6 +35,7 @@ from datasets.reviewed_case_store import (
 )
 from eval.experiment_registry import compare_experiment_summaries, list_experiment_summaries
 from eval.presets import get_research_preset, list_research_presets
+from llm.openai_case_review import AIReviewerFeedback, review_case_with_openai
 from security.secrets import validate_live_llm_config
 from ui.charts.probabilities import calibration_figure, differential_figure
 from ui.components.report_cards import headline_cards
@@ -227,6 +228,7 @@ def main() -> None:
             f"- Provider: `{settings.default_model_provider}`",
             f"- OpenAI parser: `{settings.openai_parser_model}`",
             f"- OpenAI reasoner: `{settings.openai_reasoning_model}`",
+            f"- GPT review model: `{settings.openai_case_review_model}`",
             f"- Provider ready: `{secret_status.provider_ready}`",
             f"- Microsoft Agent Lightning: `{lightning_runtime.mode}`",
             f"- Active prompt: `{active_prompt.version}`",
@@ -259,6 +261,8 @@ def main() -> None:
         try:
             report = orchestrator.analyze_text_case("console-case", case_text, policy_version=selected_case_policy)
             st.session_state["report_json"] = report.model_dump()
+            st.session_state.pop("ai_review_json", None)
+            st.session_state.pop("ai_review_error", None)
             st.session_state.pop("analysis_error", None)
         except Exception as exc:
             st.session_state["analysis_error"] = str(exc)
@@ -276,6 +280,11 @@ def main() -> None:
                 "Clinician review recommended: "
                 + " ".join(report.decision_quality.reasons[:3])
             )
+        suggested_top = report.differential.ranked[0].slug if report.differential.ranked else ""
+        suggested_tests = [recommendation.slug for recommendation in report.next_best_tests[:5]]
+        default_tests = suggested_tests[:2]
+        suggested_mechanisms = [estimate.slug for estimate in report.mechanism_states.ranked[:5]]
+        default_mechanisms = suggested_mechanisms[: min(2, len(suggested_mechanisms))]
         kpis = headline_cards(report)
         columns = st.columns(len(kpis))
         for column, (label, value) in zip(columns, kpis, strict=True):
@@ -359,16 +368,134 @@ def main() -> None:
         with tab6:
             st.code(json.dumps(report.model_dump(), indent=2), language="json")
 
+        with st.expander("Submit This Case To GPT-5.4 Review", expanded=False):
+            st.caption(
+                "This sends the case text plus the current PRIORI-X output to a stronger GPT-5.4 reviewer. "
+                "Nothing enters the reviewed-case or Lightning loop until you explicitly approve it."
+            )
+            if not settings.allow_live_llm or not settings.openai_api_key:
+                st.info(
+                    "AI review needs `PRIORI_ALLOW_LIVE_LLM=true` and a valid `OPENAI_API_KEY`. "
+                    "Your manual reviewed-case workflow still works without it."
+                )
+            else:
+                if st.button("Submit Case To GPT-5.4 Review", key="submit_case_ai_review", use_container_width=True):
+                    try:
+                        with st.spinner(f"Submitting case to {settings.openai_case_review_model}..."):
+                            ai_review = review_case_with_openai(case_text, report, settings)
+                        st.session_state["ai_review_json"] = ai_review.model_dump()
+                        st.session_state.pop("ai_review_error", None)
+                    except Exception as exc:
+                        st.session_state["ai_review_error"] = str(exc)
+
+                if "ai_review_error" in st.session_state:
+                    st.error(f"AI review failed but your case analysis was preserved: {st.session_state['ai_review_error']}")
+
+                ai_review_json = st.session_state.get("ai_review_json")
+                if ai_review_json:
+                    ai_review = AIReviewerFeedback.model_validate(ai_review_json)
+                    review_status_label = "Recommended for approval" if ai_review.review_status_recommendation == "approved" else "Recommended as draft"
+                    if ai_review.reviewer_confidence >= 0.8:
+                        st.success(f"{review_status_label}. Reviewer confidence: {ai_review.reviewer_confidence:.0%}")
+                    else:
+                        st.warning(f"{review_status_label}. Reviewer confidence: {ai_review.reviewer_confidence:.0%}")
+
+                    review_summary_col, review_detail_col = st.columns([1.2, 1])
+                    review_summary_col.markdown(f"**AI Review Summary:** {ai_review.summary}")
+                    review_summary_col.markdown(
+                        "\n".join(
+                            [
+                                f"- Reviewed diagnosis: `{ai_review.gold_diagnosis or 'not forced'}`",
+                                f"- Reviewed triage: `{ai_review.gold_triage or 'unchanged / not specified'}`",
+                                f"- Reviewed mechanisms: `{', '.join(ai_review.reviewed_mechanism_states) or 'none specified'}`",
+                                f"- Acceptable tests: `{', '.join(ai_review.acceptable_tests) or 'none specified'}`",
+                            ]
+                        )
+                    )
+                    review_detail_col.json(
+                        {
+                            "review_tags": ai_review.review_tags,
+                            "preferred_next_action": ai_review.preferred_next_action,
+                            "review_status_recommendation": ai_review.review_status_recommendation,
+                            "reviewed_contributing_processes": ai_review.reviewed_contributing_processes,
+                            "mechanism_feedback_summary": ai_review.mechanism_feedback_summary,
+                            "review_notes": ai_review.review_notes,
+                        }
+                    )
+
+                    review_save_col_1, review_save_col_2 = st.columns(2)
+                    if review_save_col_1.button(
+                        "Approve GPT Review To Inbox",
+                        key="approve_ai_review_to_inbox",
+                        use_container_width=True,
+                    ):
+                        try:
+                            row = build_reviewed_case_row(
+                                note_text=case_text,
+                                gold_diagnosis=ai_review.gold_diagnosis,
+                                acceptable_tests=ai_review.acceptable_tests,
+                                gold_triage=ai_review.gold_triage or report.triage.urgency,
+                                review_status="approved",
+                                reviewer_id=f"ai_review:{settings.openai_case_review_model}",
+                                review_notes=ai_review.review_notes,
+                                suggested_top_diagnosis=suggested_top or None,
+                                suggested_next_tests=suggested_tests,
+                                reviewed_mechanism_states=ai_review.reviewed_mechanism_states,
+                                reviewed_contributing_processes=ai_review.reviewed_contributing_processes,
+                                mechanism_feedback_summary=ai_review.mechanism_feedback_summary,
+                                preferred_next_action=ai_review.preferred_next_action,
+                                suggested_mechanism_states=suggested_mechanisms,
+                                suggested_mechanism_summary=report.mechanism_states.summary,
+                                policy_version=selected_case_policy,
+                                prompt_version=active_prompt.version,
+                                tags=ai_review.review_tags,
+                            )
+                            destination = append_reviewed_case(row, settings)
+                            st.success(
+                                f"Saved GPT-reviewed case `{row['id']}` to {destination}. "
+                                "It is now available for approved offline improvement runs."
+                            )
+                        except Exception as exc:
+                            st.error(f"Failed to save approved GPT review: {exc}")
+                    if review_save_col_2.button(
+                        "Save GPT Review As Draft",
+                        key="save_ai_review_as_draft",
+                        use_container_width=True,
+                    ):
+                        try:
+                            row = build_reviewed_case_row(
+                                note_text=case_text,
+                                gold_diagnosis=ai_review.gold_diagnosis,
+                                acceptable_tests=ai_review.acceptable_tests,
+                                gold_triage=ai_review.gold_triage or report.triage.urgency,
+                                review_status="draft",
+                                reviewer_id=f"ai_review:{settings.openai_case_review_model}",
+                                review_notes=ai_review.review_notes,
+                                suggested_top_diagnosis=suggested_top or None,
+                                suggested_next_tests=suggested_tests,
+                                reviewed_mechanism_states=ai_review.reviewed_mechanism_states,
+                                reviewed_contributing_processes=ai_review.reviewed_contributing_processes,
+                                mechanism_feedback_summary=ai_review.mechanism_feedback_summary,
+                                preferred_next_action=ai_review.preferred_next_action,
+                                suggested_mechanism_states=suggested_mechanisms,
+                                suggested_mechanism_summary=report.mechanism_states.summary,
+                                policy_version=selected_case_policy,
+                                prompt_version=active_prompt.version,
+                                tags=ai_review.review_tags,
+                            )
+                            destination = append_reviewed_case(row, settings)
+                            st.success(
+                                f"Saved GPT-reviewed case `{row['id']}` to {destination} as draft. "
+                                "Draft rows stay out of the improvement loop until approved."
+                            )
+                        except Exception as exc:
+                            st.error(f"Failed to save GPT review as draft: {exc}")
+
         with st.expander("Save This Case To Reviewed Cases", expanded=False):
             st.caption(
                 "Use this to turn a good or bad run into a reviewed case for offline Lightning improvement. "
                 f"Saved rows go to `{reviewed_cases_destination}` and will be picked up by the reviewed-cases curriculum."
             )
-            suggested_top = report.differential.ranked[0].slug if report.differential.ranked else ""
-            suggested_tests = [recommendation.slug for recommendation in report.next_best_tests[:5]]
-            default_tests = suggested_tests[:2]
-            suggested_mechanisms = [estimate.slug for estimate in report.mechanism_states.ranked[:5]]
-            default_mechanisms = suggested_mechanisms[: min(2, len(suggested_mechanisms))]
             with st.form("reviewed_case_capture_form", clear_on_submit=False):
                 reviewed_diagnosis = st.text_input(
                     "Reviewed Diagnosis",
