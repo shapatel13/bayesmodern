@@ -121,6 +121,30 @@ def _review_payload(report: ResearchReport) -> dict[str, object]:
     }
 
 
+def _case_specific_review_rubric(case_text: str, report: ResearchReport) -> list[str]:
+    lower_case_text = case_text.lower()
+    finding_keys = {finding.key for finding in report.context.findings if finding.present}
+    differential_slugs = {entry.slug for entry in report.differential.ranked}
+    rubric: list[str] = []
+
+    if (
+        "hsv_encephalitis" in differential_slugs
+        or "non_hsv_temporal_encephalitis" in differential_slugs
+        or {"temporal_lobe_mri_pattern", "hsv_pcr_negative_timed", "repeat_hsv_pcr_negative_dependent"} & finding_keys
+        or ("temporal" in lower_case_text and "pcr" in lower_case_text)
+    ):
+        rubric.extend(
+            [
+                "Treat temporal-lobe MRI findings as moderate positive support for HSV, not decisive proof.",
+                "Treat absent pleocytosis and absent classic temporal EEG findings as weak negative or near-neutral evidence only.",
+                "Repeated appropriately timed negative HSV PCRs should dominate the evidence against HSV, but the second PCR should be treated as partially dependent rather than fully independent by default.",
+                "When creatinine is rising on acyclovir, explicitly compare residual HSV probability against worsening nephrotoxicity rather than assuming treatment should continue indefinitely.",
+            ]
+        )
+
+    return rubric
+
+
 def review_case_with_openai(case_text: str, report: ResearchReport, settings: Settings) -> AIReviewerFeedback:
     if not settings.allow_live_llm:
         raise ValueError("AI review requires PRIORI_ALLOW_LIVE_LLM=true.")
@@ -132,6 +156,7 @@ def review_case_with_openai(case_text: str, report: ResearchReport, settings: Se
     mechanism_aliases = _inventory_aliases([(slug, definition.name) for slug, definition in LATENT_STATE_CATALOG.items()])
     test_aliases = _inventory_aliases([(slug, test.name) for slug, test in TEST_CATALOG.items()])
     review_payload = _review_payload(report)
+    review_rubric = _case_specific_review_rubric(case_text, report)
 
     parsed = client.responses.parse(
         model=settings.openai_case_review_model,
@@ -157,7 +182,8 @@ def review_case_with_openai(case_text: str, report: ResearchReport, settings: Se
                     + ". "
                     "Prefer these known test slugs when applicable: "
                     + ", ".join(TEST_CATALOG.keys())
-                    + "."
+                    + ". "
+                    "If a case-specific rubric is provided, use it to judge evidence weighting and threshold framing."
                 ),
             },
             {
@@ -173,6 +199,8 @@ def review_case_with_openai(case_text: str, report: ResearchReport, settings: Se
                     + json.dumps(mechanism_aliases, indent=2)
                     + "\n\nKnown test aliases:\n"
                     + json.dumps(test_aliases, indent=2)
+                    + "\n\nCase-specific review rubric:\n"
+                    + json.dumps(review_rubric, indent=2)
                 ),
             },
         ],

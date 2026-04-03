@@ -5,7 +5,7 @@ from core.latent_states import LatentStateEngine
 from core.mechanism_coupling import apply_mechanism_coupling
 from core.next_best_test import NextBestTestEngine
 from core.policy import ReasoningPolicy, get_reasoning_policy
-from core.thresholds import DecisionCostModel, calculate_thresholds, explain_threshold_position
+from core.thresholds import DecisionCostModel, ThresholdDecision, calculate_thresholds, explain_threshold_position
 from core.triage import assess_triage
 from agent.prompt_registry import resolve_prompt_template
 from evidence.cost_catalog import default_test_catalog
@@ -28,6 +28,88 @@ from utils.logging import get_logger
 
 
 logger = get_logger(__name__)
+
+
+def _has_present_finding(context, key: str) -> bool:
+    return any(finding.key == key and finding.present for finding in context.findings)
+
+
+def _find_differential_entry(differential, slug: str):
+    return next((entry for entry in differential.ranked if entry.slug == slug), None)
+
+
+def _hsv_threshold_refinement(context, differential, threshold_decision: ThresholdDecision) -> ThresholdDecision:
+    hsv_entry = _find_differential_entry(differential, "hsv_encephalitis")
+    if hsv_entry is None:
+        return threshold_decision
+
+    timed_negative_pcr = _has_present_finding(context, "hsv_pcr_negative_timed")
+    repeat_negative_pcr = _has_present_finding(context, "repeat_hsv_pcr_negative_dependent")
+    acyclovir_exposure = "acyclovir" in {medication.strip().lower() for medication in context.medications}
+    nephrotoxicity_signal = _has_present_finding(context, "acyclovir_associated_aki") or (
+        acyclovir_exposure and (_has_present_finding(context, "creatinine_elevated") or context.renal_impairment)
+    )
+
+    if not (timed_negative_pcr and acyclovir_exposure and nephrotoxicity_signal):
+        return threshold_decision
+
+    if repeat_negative_pcr and hsv_entry.posterior <= 0.05:
+        return ThresholdDecision(
+            action="observe",
+            clinician_language=(
+                "MRI remains only moderate positive support for HSV, while two appropriately timed negative CSF HSV PCRs "
+                "dominate the evidence. In this research model the residual HSV posterior has fallen below the modeled "
+                "treatment threshold, so worsening acyclovir-associated renal risk now outweighs expected antiviral benefit "
+                "unless another HSV-specific signal emerges."
+            ),
+            plain_language=(
+                "The MRI still raises concern, but two well-timed negative spinal-fluid HSV PCR tests now outweigh it. "
+                "Because kidney injury is worsening on acyclovir, continuing treatment no longer clearly looks worth it "
+                "unless new HSV-specific evidence appears."
+            ),
+        )
+
+    if repeat_negative_pcr and hsv_entry.posterior <= 0.1:
+        return ThresholdDecision(
+            action="test",
+            clinician_language=(
+                "HSV probability has fallen into a gray zone after two timed negative CSF HSV PCRs. Continued acyclovir is "
+                "no longer clearly favored over nephrotoxicity, so any further treatment should depend on sample timing, "
+                "quality, and whether stronger HSV-specific evidence remains."
+            ),
+            plain_language=(
+                "The chance of HSV now looks low enough that continuing acyclovir is uncertain rather than clearly beneficial. "
+                "Double-check test timing and whether another diagnosis fits better."
+            ),
+        )
+
+    return threshold_decision
+
+
+def _hsv_reasoning_notes(context, differential) -> tuple[list[str], list[str]]:
+    hsv_entry = _find_differential_entry(differential, "hsv_encephalitis")
+    if hsv_entry is None:
+        return [], []
+
+    note_parts: list[str] = []
+    dependency_parts: list[str] = []
+    if _has_present_finding(context, "temporal_lobe_mri_pattern"):
+        note_parts.append("Temporal-lobe MRI pattern is treated as only moderate positive support for HSV, not decisive support.")
+    if _has_present_finding(context, "no_csf_pleocytosis"):
+        note_parts.append("Absence of pleocytosis is modeled as weakly negative to near-neutral evidence.")
+    if _has_present_finding(context, "eeg_without_classic_temporal_features"):
+        note_parts.append("Absence of classic EEG features is modeled as weak negative evidence only.")
+    if _has_present_finding(context, "hsv_pcr_negative_timed"):
+        note_parts.append("A timed negative CSF HSV PCR is dominant negative evidence in this model.")
+    if _has_present_finding(context, "repeat_hsv_pcr_negative_dependent"):
+        note_parts.append("The second negative HSV PCR is treated as partially dependent rather than fully independent to avoid overstating certainty.")
+        dependency_parts.append(
+            "Repeat negative HSV PCRs are treated as partially dependent rather than fully independent evidence by default; "
+            "the second negative test adds reduced incremental weight unless timing and sample quality are exceptionally strong."
+        )
+    if _has_present_finding(context, "acyclovir_associated_aki"):
+        note_parts.append("Rising creatinine during acyclovir raises treatment-harm concern even if HSV is not fully excluded.")
+    return note_parts, dependency_parts
 
 
 def _should_expand_open_world(differential) -> bool:
@@ -219,6 +301,7 @@ class PRIORIXOrchestrator:
             policy=policy,
         )[:5]
         threshold_decision = explain_threshold_position(differential.ranked[0].posterior, thresholds)
+        threshold_decision = _hsv_threshold_refinement(context, differential, threshold_decision)
         report = ResearchReport(
             context=context,
             differential=differential,
@@ -250,6 +333,12 @@ class PRIORIXOrchestrator:
             report.differential.model_note = (
                 f"{report.differential.model_note} Mechanism layer summary: {top_states}."
             )
+        hsv_notes, hsv_dependency_notes = _hsv_reasoning_notes(context, differential)
+        if hsv_notes:
+            report.reasoning_runtime.special_reasoning_notes.extend(hsv_notes)
+            report.differential.model_note = f"{report.differential.model_note} {' '.join(hsv_notes)}"
+        if hsv_dependency_notes:
+            report.reasoning_runtime.test_dependency_notes.extend(hsv_dependency_notes)
         if open_world_plan and (open_world_plan.hypotheses or open_world_plan.suggested_tests):
             report.differential.model_note = (
                 f"{report.differential.model_note} Open-world reasoning expanded the candidate space with "

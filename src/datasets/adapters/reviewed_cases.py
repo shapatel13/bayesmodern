@@ -56,6 +56,12 @@ def normalize_reviewed_case_row(row: dict[str, object], split: str) -> Benchmark
         "preferred_next_action": str(row.get("preferred_next_action") or "").strip() or None,
         "suggested_mechanism_states": _as_list(row.get("suggested_mechanism_states")),
         "suggested_mechanism_summary": str(row.get("suggested_mechanism_summary") or "").strip() or None,
+        "expected_reasoning_tags": _as_list(row.get("expected_reasoning_tags")),
+        "expected_differential_contains": _as_list(row.get("expected_differential_contains")),
+        "expected_top_test": str(row.get("expected_top_test") or "").strip() or None,
+        "expected_threshold_action": str(row.get("expected_threshold_action") or "").strip() or None,
+        "posterior_expectations": row.get("posterior_expectations"),
+        "gold_rationale": str(row.get("gold_rationale") or "").strip() or None,
         "source": "reviewed_case",
     }
     return BenchmarkTask(

@@ -25,6 +25,12 @@ REVIEWED_CASE_TAGS: tuple[str, ...] = (
     "safety_risk",
     "cost_stewardship",
     "good_counterexample",
+    "mri_overweighted",
+    "repeat_pcr_underweighted",
+    "weak_negative_csf_misread",
+    "weak_negative_eeg_misread",
+    "repeat_test_dependence_missed",
+    "treatment_threshold_misframed",
 )
 
 

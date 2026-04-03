@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from datasets.adapters.findzebra import normalize_findzebra_row
 from datasets.catalog import get_dataset_spec
 from datasets.loader import load_benchmark_tasks, load_curriculum_train_validation_tasks, load_train_validation_tasks
+from datasets.hf_loader import load_dataset_rows
 from utils.config import Settings
 
 
@@ -217,3 +219,68 @@ def test_reviewed_cases_loader_excludes_draft_rows(tmp_path, monkeypatch) -> Non
 
     assert "reviewed-approved-1" in loaded_ids
     assert "reviewed-draft-1" not in loaded_ids
+
+
+def test_reviewed_cases_loader_preserves_gold_reasoning_expectations(tmp_path, monkeypatch) -> None:
+    from datasets import loader
+
+    reviewed_path = tmp_path / "reviewed_cases.jsonl"
+    reviewed_path.write_text(
+        json.dumps(
+            {
+                "id": "hsv-1",
+                "task_type": "diagnosis_open",
+                "note_text": "Temporal MRI pattern with two negative HSV PCRs and rising creatinine on acyclovir.",
+                "gold_diagnosis": "non_hsv_temporal_encephalitis",
+                "acceptable_tests": ["csf_autoimmune_panel"],
+                "review_status": "approved",
+                "expected_reasoning_tags": ["mri_overweighted", "repeat_test_dependence_missed"],
+                "expected_differential_contains": ["hsv_encephalitis", "non_hsv_temporal_encephalitis"],
+                "expected_top_test": "csf_autoimmune_panel",
+                "expected_threshold_action": "observe",
+                "posterior_expectations": {"hsv_encephalitis": {"min": 0.02, "max": 0.05}},
+                "gold_rationale": "Repeated timed negative PCRs should dominate the reasoning.",
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(loader, "get_settings", lambda: Settings(_env_file=None, reviewed_cases_path=str(reviewed_path)))
+
+    pair = load_train_validation_tasks("reviewed_cases", train_limit=5, validation_limit=5)
+    tasks = pair.train + pair.validation
+
+    assert len(tasks) == 1
+    metadata = tasks[0].metadata
+    assert metadata["expected_reasoning_tags"] == ["mri_overweighted", "repeat_test_dependence_missed"]
+    assert metadata["expected_differential_contains"] == ["hsv_encephalitis", "non_hsv_temporal_encephalitis"]
+    assert metadata["expected_top_test"] == "csf_autoimmune_panel"
+    assert metadata["expected_threshold_action"] == "observe"
+    assert metadata["posterior_expectations"] == {"hsv_encephalitis": {"min": 0.02, "max": 0.05}}
+
+
+def test_hf_loader_subprocess_strips_local_src_path_and_runs_outside_repo(monkeypatch) -> None:
+    from datasets import hf_loader
+
+    observed: dict[str, object] = {}
+
+    class DummyResult:
+        returncode = 0
+        stdout = "[]"
+        stderr = ""
+
+    def fake_run(args, capture_output, text, check, env, cwd):
+        observed["args"] = args
+        observed["env"] = env
+        observed["cwd"] = cwd
+        return DummyResult()
+
+    monkeypatch.setattr(hf_loader.subprocess, "run", fake_run)
+    monkeypatch.setenv("PYTHONPATH", str(Path(hf_loader.__file__).resolve().parents[1]))
+
+    rows = load_dataset_rows("openlifescienceai/medmcqa", split="validation", limit=1)
+
+    assert rows == []
+    assert observed["env"]["PRIORI_LOCAL_SRC_ROOT"] == str(Path(hf_loader.__file__).resolve().parents[1])
+    assert observed["cwd"] == str(Path.home())
+    assert "sys.modules.pop('datasets', None)" in observed["args"][2]
+    assert "distribution('datasets')" in observed["args"][2]

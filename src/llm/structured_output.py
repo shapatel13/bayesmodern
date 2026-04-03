@@ -37,6 +37,8 @@ class ReasoningRuntimeTrace(BaseModel):
     open_world_hypothesis_count: int = 0
     open_world_test_count: int = 0
     notes: list[str] = Field(default_factory=list)
+    special_reasoning_notes: list[str] = Field(default_factory=list)
+    test_dependency_notes: list[str] = Field(default_factory=list)
 
 
 class DecisionQualityAssessment(BaseModel):

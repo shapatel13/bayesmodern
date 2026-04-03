@@ -343,6 +343,14 @@ def main() -> None:
                 st.json(report.reasoning_runtime.model_dump())
             with st.expander("Decision Quality", expanded=False):
                 st.json(report.decision_quality.model_dump())
+            if report.reasoning_runtime.special_reasoning_notes:
+                with st.expander("Evidence Balance Notes", expanded=True):
+                    for note in report.reasoning_runtime.special_reasoning_notes:
+                        st.markdown(f"- {note}")
+            if report.reasoning_runtime.test_dependency_notes:
+                with st.expander("Dependent Repeat Test Handling", expanded=True):
+                    for note in report.reasoning_runtime.test_dependency_notes:
+                        st.markdown(f"- {note}")
             st.dataframe(pd.DataFrame(provenance_rows(report)), use_container_width=True, hide_index=True)
             if report.context.medications or report.context.adverse_events:
                 st.json(
@@ -556,6 +564,16 @@ def main() -> None:
                         f"Captured from PRIORI-X. Model top diagnosis was `{suggested_top or 'unknown'}`; "
                         f"current top tests were {', '.join(suggested_tests[:3]) or 'none'}; "
                         f"mechanism summary was: {report.mechanism_states.summary}"
+                        + (
+                            f" Evidence-balance notes: {' '.join(report.reasoning_runtime.special_reasoning_notes[:3])}"
+                            if report.reasoning_runtime.special_reasoning_notes
+                            else ""
+                        )
+                        + (
+                            f" Dependent-test notes: {' '.join(report.reasoning_runtime.test_dependency_notes[:2])}"
+                            if report.reasoning_runtime.test_dependency_notes
+                            else ""
+                        )
                     ),
                     height=120,
                 )
