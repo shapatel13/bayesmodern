@@ -50,6 +50,12 @@ def normalize_reviewed_case_row(row: dict[str, object], split: str) -> Benchmark
         "reviewer_id": str(row.get("reviewer_id") or "").strip() or None,
         "review_notes": str(row.get("review_notes") or "").strip() or None,
         "tags": _as_list(row.get("tags")),
+        "reviewed_mechanism_states": _as_list(row.get("reviewed_mechanism_states")),
+        "reviewed_contributing_processes": _as_list(row.get("reviewed_contributing_processes")),
+        "mechanism_feedback_summary": str(row.get("mechanism_feedback_summary") or "").strip() or None,
+        "preferred_next_action": str(row.get("preferred_next_action") or "").strip() or None,
+        "suggested_mechanism_states": _as_list(row.get("suggested_mechanism_states")),
+        "suggested_mechanism_summary": str(row.get("suggested_mechanism_summary") or "").strip() or None,
         "source": "reviewed_case",
     }
     return BenchmarkTask(

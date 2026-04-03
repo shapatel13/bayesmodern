@@ -367,6 +367,8 @@ def main() -> None:
             suggested_top = report.differential.ranked[0].slug if report.differential.ranked else ""
             suggested_tests = [recommendation.slug for recommendation in report.next_best_tests[:5]]
             default_tests = suggested_tests[:2]
+            suggested_mechanisms = [estimate.slug for estimate in report.mechanism_states.ranked[:5]]
+            default_mechanisms = suggested_mechanisms[: min(2, len(suggested_mechanisms))]
             with st.form("reviewed_case_capture_form", clear_on_submit=False):
                 reviewed_diagnosis = st.text_input(
                     "Reviewed Diagnosis",
@@ -378,6 +380,23 @@ def main() -> None:
                     options=suggested_tests,
                     default=default_tests,
                     help="Choose tests that would count as acceptable next steps for this case.",
+                )
+                reviewed_mechanisms = st.multiselect(
+                    "Reviewed Mechanism States",
+                    options=suggested_mechanisms,
+                    default=default_mechanisms,
+                    help="Capture the key physiologic/mechanistic states that should have been active for this case.",
+                )
+                reviewed_contributors_text = st.text_input(
+                    "Important Contributing Processes",
+                    value="",
+                    help="Optional comma-separated contributors like active blood loss, drug effect, congestion, hypoperfusion, or toxicity.",
+                )
+                preferred_next_action = st.text_area(
+                    "Preferred Next Action",
+                    value="",
+                    height=90,
+                    help="Describe the best next test or immediate action if the current recommendation was not right.",
                 )
                 urgency_options = ["routine", "expedited", "urgent", "emergent"]
                 urgency_index = urgency_options.index(report.triage.urgency) if report.triage.urgency in urgency_options else 2
@@ -406,7 +425,8 @@ def main() -> None:
                     "Review Notes",
                     value=(
                         f"Captured from PRIORI-X. Model top diagnosis was `{suggested_top or 'unknown'}`; "
-                        f"current top tests were {', '.join(suggested_tests[:3]) or 'none'}."
+                        f"current top tests were {', '.join(suggested_tests[:3]) or 'none'}; "
+                        f"mechanism summary was: {report.mechanism_states.summary}"
                     ),
                     height=120,
                 )
@@ -421,6 +441,11 @@ def main() -> None:
                         auto_tags.append("wrong_top_diagnosis")
                     if _normalize_slugish(reviewed_triage) != _normalize_slugish(report.triage.urgency):
                         auto_tags.append("urgency_error")
+                    if sorted(reviewed_mechanisms) != sorted(default_mechanisms):
+                        auto_tags.append("bad_mechanism_inference")
+                    contributor_processes = [
+                        item.strip() for item in reviewed_contributors_text.split(",") if item.strip()
+                    ]
                     final_review_tags = _merge_review_tags(review_tags, auto_tags)
                     row = build_reviewed_case_row(
                         note_text=case_text,
@@ -432,6 +457,12 @@ def main() -> None:
                         review_notes=review_notes,
                         suggested_top_diagnosis=suggested_top or None,
                         suggested_next_tests=suggested_tests,
+                        reviewed_mechanism_states=reviewed_mechanisms,
+                        reviewed_contributing_processes=contributor_processes,
+                        mechanism_feedback_summary=review_notes,
+                        preferred_next_action=preferred_next_action,
+                        suggested_mechanism_states=suggested_mechanisms,
+                        suggested_mechanism_summary=report.mechanism_states.summary,
                         policy_version=selected_case_policy,
                         prompt_version=active_prompt.version,
                         tags=final_review_tags,

@@ -18,9 +18,15 @@ def test_reviewed_case_store_appends_jsonl_row(tmp_path) -> None:
         review_notes="Regression case.",
         suggested_top_diagnosis="pneumonia",
         suggested_next_tests=["cxr"],
+        reviewed_mechanism_states=["thrombotic_ischemic_tendency"],
+        reviewed_contributing_processes=["plaque rupture"],
+        mechanism_feedback_summary="Mechanism should favor ischemia.",
+        preferred_next_action="Immediate ECG and serial troponin.",
+        suggested_mechanism_states=["low_effective_arterial_volume"],
+        suggested_mechanism_summary="Mechanism layer remained broad.",
         policy_version="v1-deterministic",
         prompt_version="v1-offline",
-        tags=["wrong_top_diagnosis", "parser_miss", "wrong_top_diagnosis"],
+        tags=["wrong_top_diagnosis", "parser_miss", "bad_mechanism_inference", "wrong_top_diagnosis"],
     )
 
     destination = reviewed_case_store.append_reviewed_case(row, settings)
@@ -29,7 +35,9 @@ def test_reviewed_case_store_appends_jsonl_row(tmp_path) -> None:
     assert payload["gold_diagnosis"] == "acs"
     assert payload["acceptable_tests"] == ["ecg", "hs_troponin"]
     assert payload["suggested_top_diagnosis"] == "pneumonia"
-    assert payload["tags"] == ["wrong_top_diagnosis", "parser_miss"]
+    assert payload["reviewed_mechanism_states"] == ["thrombotic_ischemic_tendency"]
+    assert payload["preferred_next_action"] == "Immediate ECG and serial troponin."
+    assert payload["tags"] == ["wrong_top_diagnosis", "parser_miss", "bad_mechanism_inference"]
 
 
 def test_reviewed_case_store_resolves_default_destination(tmp_path, monkeypatch) -> None:
