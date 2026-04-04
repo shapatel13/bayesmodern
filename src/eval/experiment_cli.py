@@ -115,7 +115,7 @@ def build_parser() -> argparse.ArgumentParser:
     train_dataset_prompt_parser.add_argument("--validation-split", default=None)
     train_dataset_prompt_parser.add_argument("--prompt-version", default="active")
     train_dataset_prompt_parser.add_argument("--policy-version", default="v1-deterministic")
-    train_dataset_prompt_parser.add_argument("--n-runners", type=int, default=1)
+    train_dataset_prompt_parser.add_argument("--n-runners", type=int, default=2)
     train_dataset_prompt_parser.add_argument("--artifacts-root", default=str(DEFAULT_ARTIFACTS_ROOT))
 
     train_curriculum_prompt_parser = subparsers.add_parser(
@@ -127,7 +127,7 @@ def build_parser() -> argparse.ArgumentParser:
     train_curriculum_prompt_parser.add_argument("--policy-version", default="v1-deterministic")
     train_curriculum_prompt_parser.add_argument("--train-cap-per-component", type=int, default=None)
     train_curriculum_prompt_parser.add_argument("--validation-cap-per-component", type=int, default=None)
-    train_curriculum_prompt_parser.add_argument("--n-runners", type=int, default=1)
+    train_curriculum_prompt_parser.add_argument("--n-runners", type=int, default=2)
     train_curriculum_prompt_parser.add_argument("--artifacts-root", default=str(DEFAULT_ARTIFACTS_ROOT))
 
     auto_improve = subparsers.add_parser(
@@ -137,7 +137,7 @@ def build_parser() -> argparse.ArgumentParser:
     auto_improve.add_argument("--policy-version", default="v1-deterministic")
     auto_improve.add_argument("--train-cap-per-component", type=int, default=None)
     auto_improve.add_argument("--validation-cap-per-component", type=int, default=None)
-    auto_improve.add_argument("--n-runners", type=int, default=1)
+    auto_improve.add_argument("--n-runners", type=int, default=2)
     auto_improve.add_argument("--artifacts-root", default=str(DEFAULT_ARTIFACTS_ROOT))
 
     return parser
@@ -166,6 +166,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "policy_count": len(list_reasoning_policies()),
             "policies": [policy.version for policy in list_reasoning_policies()],
             "active_prompt_version": get_active_prompt_record().version,
+            "lightning_training_profile": settings.lightning_training_profile,
+            "lightning_disable_agentops": settings.lightning_disable_agentops,
             "lightning_runtime": detect_lightning_runtime(settings).model_dump(),
             "artifacts_root": str(DEFAULT_ARTIFACTS_ROOT),
         }

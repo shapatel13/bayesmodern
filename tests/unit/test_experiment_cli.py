@@ -60,6 +60,8 @@ def test_experiment_cli_status_prints_runtime(capsys) -> None:
     captured = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert "lightning_runtime" in captured
+    assert captured["lightning_training_profile"] == "balanced"
+    assert captured["lightning_disable_agentops"] is True
     assert "medmcqa" in captured["datasets"]
     assert "core_diagnostic_lab" in captured["presets"]
     assert "broad_medical_feedback_lab" in captured["curricula"]
@@ -144,11 +146,11 @@ def test_experiment_cli_lists_prompts(capsys) -> None:
 
 def test_experiment_cli_auto_improve(monkeypatch, capsys) -> None:
     from eval import experiment_cli
+    observed: dict[str, object] = {}
 
-    monkeypatch.setattr(
-        experiment_cli,
-        "auto_improve_prompt",
-        lambda *args, **kwargs: PromptTrainingSummary(
+    def fake_auto_improve(*args, **kwargs):
+        observed["kwargs"] = kwargs
+        return PromptTrainingSummary(
             training_id="train_1",
             created_at="2026-04-02T12:00:00+00:00",
             objective_kind="curriculum",
@@ -161,7 +163,12 @@ def test_experiment_cli_auto_improve(monkeypatch, capsys) -> None:
             baseline_experiment_id="exp_baseline",
             lightning_runtime_mode="export_only",
             notes=["Install Ubuntu in WSL before native training."],
-        ),
+        )
+
+    monkeypatch.setattr(
+        experiment_cli,
+        "auto_improve_prompt",
+        fake_auto_improve,
     )
 
     exit_code = main(["auto-improve"])
@@ -169,3 +176,4 @@ def test_experiment_cli_auto_improve(monkeypatch, capsys) -> None:
     captured = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert captured["status"] == "blocked"
+    assert observed["kwargs"]["n_runners"] == 2

@@ -202,6 +202,12 @@ def _train_loaded_tasks(
         "Prompt optimization is always offline and benchmark-driven.",
         "Raw app traffic is never used directly for training.",
         "Only held-out validation tasks are used for prompt promotion decisions.",
+        f"Lightning training profile: {settings.lightning_training_profile}.",
+        (
+            "AgentOps tracer disabled for speed and cleaner logs."
+            if settings.lightning_disable_agentops
+            else "AgentOps tracer left enabled."
+        ),
     ]
 
     baseline_dir = artifact_dir / "baseline"
@@ -232,6 +238,8 @@ def _train_loaded_tasks(
         settings=settings,
         prompt_version=baseline_prompt.version,
         policy_version=policy_version,
+        train_task_count=len(train_tasks),
+        validation_task_count=len(validation_tasks),
         n_runners=n_runners,
     )
     recipe.trainer.fit(recipe.agent, train_tasks, val_dataset=validation_tasks)

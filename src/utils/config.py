@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 SafetyMode = Literal["conservative", "standard", "research"]
+LightningTrainingProfile = Literal["fast", "balanced", "deep"]
 
 
 class Settings(BaseSettings):
@@ -34,6 +35,13 @@ class Settings(BaseSettings):
     trace_retention_days: int = Field(default=30, alias="PRIORI_TRACE_RETENTION_DAYS")
     seed: int = Field(default=17, alias="PRIORI_SEED")
     experiment_namespace: str = Field(default="local-dev", alias="PRIORI_EXPERIMENT_NAMESPACE")
+    lightning_training_profile: LightningTrainingProfile = Field(
+        default="balanced", alias="PRIORI_LIGHTNING_TRAINING_PROFILE"
+    )
+    lightning_disable_agentops: bool = Field(default=True, alias="PRIORI_LIGHTNING_DISABLE_AGENTOPS")
+    lightning_rollout_batch_timeout_sec: float = Field(
+        default=900.0, alias="PRIORI_LIGHTNING_ROLLOUT_BATCH_TIMEOUT_SEC"
+    )
     mechanism_dag_enabled: bool = Field(default=True, alias="PRIORI_MECHANISM_DAG_ENABLED")
     open_world_reasoning_enabled: bool = Field(default=True, alias="PRIORI_OPEN_WORLD_REASONING_ENABLED")
     open_world_expand_uncertain_only: bool = Field(default=True, alias="PRIORI_OPEN_WORLD_EXPAND_UNCERTAIN_ONLY")

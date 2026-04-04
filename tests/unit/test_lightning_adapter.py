@@ -8,6 +8,7 @@ from agent.lightning_adapter import (
     detect_lightning_runtime,
     export_lightning_bundle,
     render_prompt_template,
+    resolve_lightning_training_config,
 )
 from agent.trace_schema import ExperimentTrace, RewardBreakdown, TraceStep
 from llm.structured_output import ModelRoutingDecision, ResearchReport
@@ -217,6 +218,62 @@ def test_detect_lightning_runtime_reports_missing_apo_dependency(monkeypatch) ->
 def test_render_prompt_template_formats_task_text() -> None:
     rendered = render_prompt_template("Case:\n{task}", "Example vignette")
     assert "Example vignette" in rendered
+
+
+def test_resolve_lightning_training_config_uses_balanced_defaults_and_dummy_tracer() -> None:
+    class FakeAGL:
+        class DummyTracer:
+            pass
+
+    config = resolve_lightning_training_config(
+        agl=FakeAGL(),
+        settings=Settings(
+            _env_file=None,
+            lightning_training_profile="balanced",
+            lightning_disable_agentops=True,
+            lightning_rollout_batch_timeout_sec=900,
+        ),
+        train_task_count=10,
+        validation_task_count=6,
+        requested_n_runners=4,
+    )
+
+    assert config.n_runners == 4
+    assert config.apo_kwargs["beam_width"] == 2
+    assert config.apo_kwargs["branch_factor"] == 2
+    assert config.apo_kwargs["beam_rounds"] == 1
+    assert config.apo_kwargs["run_initial_validation"] is False
+    assert config.apo_kwargs["val_batch_size"] == 6
+    assert config.apo_kwargs["gradient_batch_size"] == 4
+    assert config.tracer.__class__.__name__ == "DummyTracer"
+
+
+def test_resolve_lightning_training_config_fast_profile_clamps_parallelism() -> None:
+    class FakeAGL:
+        class DummyTracer:
+            pass
+
+    config = resolve_lightning_training_config(
+        agl=FakeAGL(),
+        settings=Settings(
+            _env_file=None,
+            lightning_training_profile="fast",
+            lightning_disable_agentops=False,
+            lightning_rollout_batch_timeout_sec=300,
+        ),
+        train_task_count=1,
+        validation_task_count=20,
+        requested_n_runners=8,
+    )
+
+    assert config.n_runners == 1
+    assert config.tracer is None
+    assert config.apo_kwargs["beam_width"] == 1
+    assert config.apo_kwargs["branch_factor"] == 1
+    assert config.apo_kwargs["beam_rounds"] == 1
+    assert config.apo_kwargs["gradient_batch_size"] == 1
+    assert config.apo_kwargs["val_batch_size"] == 4
+    assert config.apo_kwargs["rollout_batch_timeout"] == 300
 
 
 def test_lightning_rollout_agent_accepts_dict_task_payload(monkeypatch) -> None:

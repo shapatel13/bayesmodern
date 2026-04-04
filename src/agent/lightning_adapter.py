@@ -59,6 +59,13 @@ class NativeLightningRecipe:
     runtime: LightningRuntimeStatus
 
 
+@dataclass(frozen=True)
+class LightningTrainingConfig:
+    n_runners: int
+    tracer: Any
+    apo_kwargs: dict[str, Any]
+
+
 def _running_in_wsl() -> bool:
     return bool(os.environ.get("WSL_INTEROP") or os.environ.get("WSL_DISTRO_NAME"))
 
@@ -303,6 +310,52 @@ def _coerce_benchmark_task(task: BenchmarkTask | dict[str, Any]) -> BenchmarkTas
     return BenchmarkTask.model_validate(task)
 
 
+def resolve_lightning_training_config(
+    *,
+    agl: Any,
+    settings: Settings,
+    train_task_count: int,
+    validation_task_count: int,
+    requested_n_runners: int,
+) -> LightningTrainingConfig:
+    profile = settings.lightning_training_profile
+    effective_train = max(1, train_task_count)
+    effective_validation = max(1, validation_task_count)
+    effective_runners = max(1, min(requested_n_runners, effective_train, 4))
+
+    profile_kwargs: dict[str, dict[str, Any]] = {
+        "fast": {
+            "beam_width": 1,
+            "branch_factor": 1,
+            "beam_rounds": 1,
+            "gradient_batch_size": min(2, effective_train),
+            "val_batch_size": min(4, effective_validation),
+        },
+        "balanced": {
+            "beam_width": 2,
+            "branch_factor": 2,
+            "beam_rounds": 1,
+            "gradient_batch_size": min(4, effective_train),
+            "val_batch_size": min(8, effective_validation),
+        },
+        "deep": {
+            "beam_width": 4,
+            "branch_factor": 4,
+            "beam_rounds": 3,
+            "gradient_batch_size": min(4, effective_train),
+            "val_batch_size": min(16, effective_validation),
+        },
+    }
+    apo_kwargs = {
+        **profile_kwargs[profile],
+        "run_initial_validation": False,
+        "rollout_batch_timeout": settings.lightning_rollout_batch_timeout_sec,
+    }
+
+    tracer = agl.DummyTracer() if settings.lightning_disable_agentops and hasattr(agl, "DummyTracer") else None
+    return LightningTrainingConfig(n_runners=effective_runners, tracer=tracer, apo_kwargs=apo_kwargs)
+
+
 def create_lightning_rollout_agent(
     settings: Settings | None = None,
     *,
@@ -355,6 +408,8 @@ def build_native_lightning_recipe(
     settings: Settings | None = None,
     prompt_version: str = "active",
     policy_version: str = "v1-deterministic",
+    train_task_count: int = 1,
+    validation_task_count: int = 1,
     n_runners: int = 4,
 ) -> NativeLightningRecipe:
     settings = settings or get_settings()
@@ -366,18 +421,27 @@ def build_native_lightning_recipe(
     from openai import AsyncOpenAI
 
     prompt_record = resolve_prompt_record(prompt_version)
+    training_config = resolve_lightning_training_config(
+        agl=agl,
+        settings=settings,
+        train_task_count=train_task_count,
+        validation_task_count=validation_task_count,
+        requested_n_runners=n_runners,
+    )
     agent = create_lightning_rollout_agent(settings=settings, policy_version=policy_version)
     algorithm = agl.APO(
         AsyncOpenAI(api_key=settings.openai_api_key),
         gradient_model=settings.openai_reasoning_model,
         apply_edit_model=settings.openai_verifier_model,
+        **training_config.apo_kwargs,
     )
     trainer = agl.Trainer(
         algorithm=algorithm,
-        n_runners=n_runners,
+        n_runners=training_config.n_runners,
         initial_resources={
             "prompt_template": agl.PromptTemplate(template=prompt_record.template, engine="f-string"),
         },
         adapter=agl.TraceToMessages(),
+        tracer=training_config.tracer,
     )
     return NativeLightningRecipe(agent=agent, trainer=trainer, runtime=runtime)
