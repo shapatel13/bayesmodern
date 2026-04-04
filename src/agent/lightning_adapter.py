@@ -5,6 +5,7 @@ import os
 import sys
 import subprocess
 from dataclasses import dataclass
+from contextlib import asynccontextmanager, contextmanager
 from importlib import import_module
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -310,6 +311,41 @@ def _coerce_benchmark_task(task: BenchmarkTask | dict[str, Any]) -> BenchmarkTas
     return BenchmarkTask.model_validate(task)
 
 
+def _build_noop_tracer(agl: Any) -> Any:
+    class PRIORIXNoOpTracer(agl.DummyTracer):
+        def __init__(self) -> None:
+            super().__init__()
+            self._last_trace: list[Any] = []
+
+        @asynccontextmanager
+        async def trace_context(
+            self,
+            name: str | None = None,
+            *,
+            store: Any = None,
+            rollout_id: str | None = None,
+            attempt_id: str | None = None,
+        ):
+            self._last_trace = []
+            yield None
+
+        @contextmanager
+        def _trace_context_sync(
+            self,
+            name: str | None = None,
+            *,
+            rollout_id: str | None = None,
+            attempt_id: str | None = None,
+        ):
+            self._last_trace = []
+            yield None
+
+        def get_last_trace(self) -> list[Any]:
+            return list(self._last_trace)
+
+    return PRIORIXNoOpTracer()
+
+
 def resolve_lightning_training_config(
     *,
     agl: Any,
@@ -352,7 +388,7 @@ def resolve_lightning_training_config(
         "rollout_batch_timeout": settings.lightning_rollout_batch_timeout_sec,
     }
 
-    tracer = agl.DummyTracer() if settings.lightning_disable_agentops and hasattr(agl, "DummyTracer") else None
+    tracer = _build_noop_tracer(agl) if settings.lightning_disable_agentops and hasattr(agl, "DummyTracer") else None
     return LightningTrainingConfig(n_runners=effective_runners, tracer=tracer, apo_kwargs=apo_kwargs)
 
 
@@ -364,13 +400,14 @@ def create_lightning_rollout_agent(
     settings = settings or get_settings()
     agl = _import_agentlightning()
     reward_model = CompositeRewardModel()
+    emit_traces = not settings.lightning_disable_agentops
 
     @agl.rollout
     def priori_x_prompt_rollout(task: BenchmarkTask | dict[str, Any], prompt_template: Any) -> float:
         normalized_task = _coerce_benchmark_task(task)
         orchestrator = PRIORIXOrchestrator(settings=settings, policy_version=policy_version)
         rendered_prompt = render_prompt_template(prompt_template, normalized_task.prompt)
-        if hasattr(agl, "emit_object"):
+        if emit_traces and hasattr(agl, "emit_object"):
             agl.emit_object(
                 {
                     "task_id": normalized_task.task_id,
@@ -386,7 +423,7 @@ def create_lightning_rollout_agent(
             prompt_template=str(prompt_template),
         )
         reward = reward_model.score(normalized_task, report)
-        if hasattr(agl, "emit_object"):
+        if emit_traces and hasattr(agl, "emit_object"):
             agl.emit_object(
                 {
                     "top_diagnosis": report.differential.ranked[0].slug if report.differential.ranked else None,
@@ -396,7 +433,7 @@ def create_lightning_rollout_agent(
                     "failure_categories": reward.failure_categories,
                 }
             )
-        if hasattr(agl, "emit_reward"):
+        if emit_traces and hasattr(agl, "emit_reward"):
             agl.emit_reward(reward.total_reward)
         return reward.total_reward
 

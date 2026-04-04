@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -223,7 +224,18 @@ def test_render_prompt_template_formats_task_text() -> None:
 def test_resolve_lightning_training_config_uses_balanced_defaults_and_dummy_tracer() -> None:
     class FakeAGL:
         class DummyTracer:
-            pass
+            def create_span(self, *args, **kwargs):
+                return None
+
+            def operation_context(self, *args, **kwargs):
+                class _Ctx:
+                    def __enter__(self):
+                        return self
+
+                    def __exit__(self, exc_type, exc, tb):
+                        return False
+
+                return _Ctx()
 
     config = resolve_lightning_training_config(
         agl=FakeAGL(),
@@ -245,13 +257,31 @@ def test_resolve_lightning_training_config_uses_balanced_defaults_and_dummy_trac
     assert config.apo_kwargs["run_initial_validation"] is False
     assert config.apo_kwargs["val_batch_size"] == 6
     assert config.apo_kwargs["gradient_batch_size"] == 4
-    assert config.tracer.__class__.__name__ == "DummyTracer"
+    assert config.tracer.__class__.__name__ == "PRIORIXNoOpTracer"
+
+    async def _exercise_trace():
+        async with config.tracer.trace_context(name="demo"):
+            return "ok"
+
+    assert asyncio.run(_exercise_trace()) == "ok"
+    assert config.tracer.get_last_trace() == []
 
 
 def test_resolve_lightning_training_config_fast_profile_clamps_parallelism() -> None:
     class FakeAGL:
         class DummyTracer:
-            pass
+            def create_span(self, *args, **kwargs):
+                return None
+
+            def operation_context(self, *args, **kwargs):
+                class _Ctx:
+                    def __enter__(self):
+                        return self
+
+                    def __exit__(self, exc_type, exc, tb):
+                        return False
+
+                return _Ctx()
 
     config = resolve_lightning_training_config(
         agl=FakeAGL(),
@@ -319,13 +349,59 @@ def test_lightning_rollout_agent_accepts_dict_task_payload(monkeypatch) -> None:
     monkeypatch.setattr(lightning_adapter, "PRIORIXOrchestrator", FakeOrchestrator)
     monkeypatch.setattr(lightning_adapter, "CompositeRewardModel", FakeRewardModel)
 
-    rollout = create_lightning_rollout_agent(settings=Settings(_env_file=None))
+    rollout = create_lightning_rollout_agent(
+        settings=Settings(_env_file=None, lightning_disable_agentops=False),
+    )
     reward = rollout(_sample_task().model_dump(), prompt_template="Case:\n{task}")
 
     assert reward == 0.75
     assert emitted_objects[0]["task_id"] == "task-1"
     assert emitted_objects[1]["rendered_prompt_preview"].startswith("Case:")
     assert emitted_rewards == [0.75]
+
+
+def test_lightning_rollout_agent_skips_emit_calls_when_tracing_disabled(monkeypatch) -> None:
+    from agent import lightning_adapter
+
+    class FakeAGL:
+        @staticmethod
+        def rollout(func):
+            return func
+
+        @staticmethod
+        def emit_object(payload):
+            raise AssertionError("emit_object should not be called when tracing is disabled")
+
+        @staticmethod
+        def emit_reward(value):
+            raise AssertionError("emit_reward should not be called when tracing is disabled")
+
+    class FakeOrchestrator:
+        def __init__(self, settings=None, policy_version: str = "v1-deterministic") -> None:
+            self.policy_version = policy_version
+
+        def analyze_text_case(self, case_id: str, note_text: str, *, policy_version: str | None = None, prompt_template: str | None = None):
+            assert case_id == "task-1"
+            return _sample_trace().report
+
+    class FakeRewardModel:
+        def score(self, task, report):
+            class Reward:
+                total_reward = 0.25
+                failure_categories = []
+
+            return Reward()
+
+    monkeypatch.setattr(lightning_adapter, "_import_agentlightning", lambda: FakeAGL())
+    monkeypatch.setattr(lightning_adapter, "PRIORIXOrchestrator", FakeOrchestrator)
+    monkeypatch.setattr(lightning_adapter, "CompositeRewardModel", FakeRewardModel)
+
+    rollout = create_lightning_rollout_agent(
+        settings=Settings(_env_file=None, lightning_disable_agentops=True),
+    )
+    reward = rollout(_sample_task().model_dump(), prompt_template="Case:\n{task}")
+
+    assert reward == 0.25
 
 
 def test_export_lightning_bundle_writes_machine_readable_files(tmp_path: Path, monkeypatch) -> None:
