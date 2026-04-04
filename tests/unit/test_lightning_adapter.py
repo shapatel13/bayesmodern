@@ -426,6 +426,7 @@ def test_export_lightning_bundle_writes_machine_readable_files(tmp_path: Path, m
         report_markdown="# Demo",
         output_dir=tmp_path,
         settings=Settings(_env_file=None, allow_live_llm=False),
+        prompt_version="v1-offline",
     )
 
     manifest_path = tmp_path / "lightning_bundle_manifest.json"

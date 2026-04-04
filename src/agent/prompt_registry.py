@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Literal
 
@@ -16,6 +17,7 @@ PromptStatus = Literal["active", "candidate", "archived", "rejected"]
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SEED_REGISTRY_PATH = _REPO_ROOT / "artifacts" / "models" / "prompt_registry.seed.json"
 _RUNTIME_REGISTRY_PATH = _REPO_ROOT / "artifacts" / "models" / "prompt_registry.json"
+_PEER_SYNC_ENV = "PRIORI_PROMPT_REGISTRY_SYNC_PATH"
 
 
 class PromptRecord(BaseModel):
@@ -35,6 +37,43 @@ class PromptRecord(BaseModel):
 class PromptRegistry(BaseModel):
     active_version: str
     prompts: list[PromptRecord] = Field(default_factory=list)
+
+
+def _running_in_wsl() -> bool:
+    return bool(os.environ.get("WSL_INTEROP") or os.environ.get("WSL_DISTRO_NAME"))
+
+
+def _peer_registry_candidates() -> list[Path]:
+    configured = os.environ.get(_PEER_SYNC_ENV)
+    candidates: list[Path] = []
+    if configured:
+        candidates.append(Path(configured))
+
+    runtime_text = str(_RUNTIME_REGISTRY_PATH)
+    if _running_in_wsl():
+        default_windows_repo = Path("/mnt/c/Users/msmsh/Downloads/bayesmodern/artifacts/models/prompt_registry.json")
+        if str(default_windows_repo) != runtime_text:
+            candidates.append(default_windows_repo)
+    elif os.name == "nt":
+        default_wsl_repo = Path(r"\\wsl.localhost\Ubuntu\home\msmsharad\bayesmodern-wsl\artifacts\models\prompt_registry.json")
+        if str(default_wsl_repo) != runtime_text:
+            candidates.append(default_wsl_repo)
+
+    deduped: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key not in seen:
+            deduped.append(candidate)
+            seen.add(key)
+    return deduped
+
+
+def get_prompt_registry_sync_target() -> str | None:
+    candidates = _peer_registry_candidates()
+    if not candidates:
+        return None
+    return str(candidates[0])
 
 
 def _ensure_seed_registry() -> None:
@@ -73,13 +112,80 @@ def _initialize_runtime_registry() -> None:
     _RUNTIME_REGISTRY_PATH.write_text(_SEED_REGISTRY_PATH.read_text(encoding="utf-8"), encoding="utf-8")
 
 
-def _write_registry(registry: PromptRegistry) -> None:
-    _RUNTIME_REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _RUNTIME_REGISTRY_PATH.write_text(dumps_pretty(registry.model_dump()), encoding="utf-8")
+def _write_registry_file(path: Path, registry: PromptRegistry) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(dumps_pretty(registry.model_dump()), encoding="utf-8")
+
+
+def _merge_prompt_registries(base: PromptRegistry, incoming: PromptRegistry) -> PromptRegistry:
+    merged_by_version = {prompt.version: prompt for prompt in base.prompts}
+    for prompt in incoming.prompts:
+        merged_by_version[prompt.version] = prompt
+
+    ordered_versions: list[str] = []
+    for prompt in base.prompts + incoming.prompts:
+        if prompt.version not in ordered_versions:
+            ordered_versions.append(prompt.version)
+
+    active_version = incoming.active_version if incoming.active_version in merged_by_version else base.active_version
+    return PromptRegistry(
+        active_version=active_version,
+        prompts=[merged_by_version[version] for version in ordered_versions if version in merged_by_version],
+    )
+
+
+def _sync_from_peer_registry() -> None:
+    if os.environ.get("PRIORI_DISABLE_PROMPT_REGISTRY_SYNC", "").lower() in {"1", "true", "yes"}:
+        return
+    if not _RUNTIME_REGISTRY_PATH.exists():
+        return
+
+    try:
+        local_registry = PromptRegistry.model_validate_json(_RUNTIME_REGISTRY_PATH.read_text(encoding="utf-8"))
+        local_mtime = _RUNTIME_REGISTRY_PATH.stat().st_mtime
+    except Exception:
+        return
+
+    for peer_path in _peer_registry_candidates():
+        if not peer_path.exists():
+            continue
+        try:
+            peer_registry = PromptRegistry.model_validate_json(peer_path.read_text(encoding="utf-8"))
+            peer_mtime = peer_path.stat().st_mtime
+        except Exception:
+            continue
+        if peer_mtime <= local_mtime:
+            continue
+        merged = _merge_prompt_registries(local_registry, peer_registry)
+        _write_registry_file(_RUNTIME_REGISTRY_PATH, merged)
+        local_registry = merged
+        local_mtime = _RUNTIME_REGISTRY_PATH.stat().st_mtime
+
+
+def _mirror_registry_to_peer(registry: PromptRegistry) -> None:
+    if os.environ.get("PRIORI_DISABLE_PROMPT_REGISTRY_SYNC", "").lower() in {"1", "true", "yes"}:
+        return
+    for peer_path in _peer_registry_candidates():
+        try:
+            if peer_path.exists():
+                peer_registry = PromptRegistry.model_validate_json(peer_path.read_text(encoding="utf-8"))
+                merged = _merge_prompt_registries(peer_registry, registry)
+            else:
+                merged = registry
+            _write_registry_file(peer_path, merged)
+        except Exception:
+            continue
+
+
+def _write_registry(registry: PromptRegistry, *, mirror: bool = True) -> None:
+    _write_registry_file(_RUNTIME_REGISTRY_PATH, registry)
+    if mirror:
+        _mirror_registry_to_peer(registry)
 
 
 def load_prompt_registry() -> PromptRegistry:
     _initialize_runtime_registry()
+    _sync_from_peer_registry()
     return PromptRegistry.model_validate_json(_RUNTIME_REGISTRY_PATH.read_text(encoding="utf-8"))
 
 

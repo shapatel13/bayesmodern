@@ -14,6 +14,7 @@ from agent.lightning_adapter import detect_lightning_runtime
 from agent.lightning_train import auto_improve_prompt, train_curriculum_prompt, train_dataset_prompt
 from agent.prompt_registry import (
     get_active_prompt_record,
+    get_prompt_registry_sync_target,
     list_prompt_records,
     promote_prompt_version,
 )
@@ -166,6 +167,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             "policy_count": len(list_reasoning_policies()),
             "policies": [policy.version for policy in list_reasoning_policies()],
             "active_prompt_version": get_active_prompt_record().version,
+            "prompt_registry_sync_target": get_prompt_registry_sync_target(),
             "lightning_training_profile": settings.lightning_training_profile,
             "lightning_disable_agentops": settings.lightning_disable_agentops,
             "lightning_runtime": detect_lightning_runtime(settings).model_dump(),

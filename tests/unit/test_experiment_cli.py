@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from agent.prompt_registry import get_active_prompt_record
 from agent.lightning_adapter import LightningRuntimeStatus
 from agent.lightning_train import PromptTrainingSummary
 from agent.policy_optimizer import PolicyOptimizationSummary
@@ -141,7 +142,7 @@ def test_experiment_cli_lists_prompts(capsys) -> None:
 
     captured = json.loads(capsys.readouterr().out)
     assert exit_code == 0
-    assert captured["active_prompt"]["version"] == "v1-offline"
+    assert captured["active_prompt"]["version"] == get_active_prompt_record().version
 
 
 def test_experiment_cli_auto_improve(monkeypatch, capsys) -> None:
