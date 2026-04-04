@@ -3,7 +3,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from agent.lightning_adapter import detect_lightning_runtime, export_lightning_bundle, render_prompt_template
+from agent.lightning_adapter import (
+    create_lightning_rollout_agent,
+    detect_lightning_runtime,
+    export_lightning_bundle,
+    render_prompt_template,
+)
 from agent.trace_schema import ExperimentTrace, RewardBreakdown, TraceStep
 from llm.structured_output import ModelRoutingDecision, ResearchReport
 from priorix_tasks.common import BenchmarkTask
@@ -190,9 +195,80 @@ def test_detect_lightning_runtime_falls_back_to_export_mode_when_package_missing
     assert runtime.package_available is False
 
 
+def test_detect_lightning_runtime_reports_missing_apo_dependency(monkeypatch) -> None:
+    from agent import lightning_adapter
+
+    monkeypatch.setattr(lightning_adapter, "_agentlightning_version", lambda: "0.3.0")
+    monkeypatch.setattr(lightning_adapter, "_apo_dependency_issue", lambda: "missing dependency `poml`")
+    settings = Settings(
+        _env_file=None,
+        allow_live_llm=True,
+        default_model_provider="openai",
+        openai_api_key="test-key",
+    )
+    runtime = detect_lightning_runtime(settings)
+
+    assert runtime.mode == "export_only"
+    assert runtime.package_available is True
+    assert runtime.native_training_ready is False
+    assert "poml" in runtime.reason
+
+
 def test_render_prompt_template_formats_task_text() -> None:
     rendered = render_prompt_template("Case:\n{task}", "Example vignette")
     assert "Example vignette" in rendered
+
+
+def test_lightning_rollout_agent_accepts_dict_task_payload(monkeypatch) -> None:
+    from agent import lightning_adapter
+
+    emitted_objects: list[dict[str, object]] = []
+    emitted_rewards: list[float] = []
+
+    class FakeAGL:
+        @staticmethod
+        def rollout(func):
+            return func
+
+        @staticmethod
+        def emit_object(payload):
+            emitted_objects.append(payload)
+
+        @staticmethod
+        def emit_reward(value):
+            emitted_rewards.append(value)
+
+    class FakeOrchestrator:
+        def __init__(self, settings=None, policy_version: str = "v1-deterministic") -> None:
+            self.policy_version = policy_version
+
+        def analyze_text_case(self, case_id: str, note_text: str, *, policy_version: str | None = None, prompt_template: str | None = None):
+            assert case_id == "task-1"
+            assert "Pleuritic chest pain" in note_text
+            assert prompt_template == "Case:\n{task}"
+            return _sample_trace().report
+
+    class FakeRewardModel:
+        def score(self, task, report):
+            assert isinstance(task, BenchmarkTask)
+
+            class Reward:
+                total_reward = 0.75
+                failure_categories = ["demo"]
+
+            return Reward()
+
+    monkeypatch.setattr(lightning_adapter, "_import_agentlightning", lambda: FakeAGL())
+    monkeypatch.setattr(lightning_adapter, "PRIORIXOrchestrator", FakeOrchestrator)
+    monkeypatch.setattr(lightning_adapter, "CompositeRewardModel", FakeRewardModel)
+
+    rollout = create_lightning_rollout_agent(settings=Settings(_env_file=None))
+    reward = rollout(_sample_task().model_dump(), prompt_template="Case:\n{task}")
+
+    assert reward == 0.75
+    assert emitted_objects[0]["task_id"] == "task-1"
+    assert emitted_objects[1]["rendered_prompt_preview"].startswith("Case:")
+    assert emitted_rewards == [0.75]
 
 
 def test_export_lightning_bundle_writes_machine_readable_files(tmp_path: Path, monkeypatch) -> None:

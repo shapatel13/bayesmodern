@@ -88,17 +88,34 @@ def _agentlightning_version() -> str | None:
         return None
 
 
+def _apo_dependency_issue() -> str | None:
+    try:
+        import_module("agentlightning.algorithm.apo")
+    except ModuleNotFoundError as exc:
+        missing_name = exc.name or "unknown module"
+        return (
+            f"Microsoft Agent Lightning APO is installed incompletely; missing dependency `{missing_name}`. "
+            "Install the APO extras with `python -m pip install -e \".[lightning]\"` or `python -m pip install \"agentlightning[apo]>=0.3.0\" poml`."
+        )
+    except Exception as exc:
+        return f"Microsoft Agent Lightning APO could not be imported cleanly: {exc}"
+    return None
+
+
 def detect_lightning_runtime(settings: Settings | None = None) -> LightningRuntimeStatus:
     settings = settings or get_settings()
     package_version = _agentlightning_version()
     package_available = package_version is not None
+    apo_dependency_issue = _apo_dependency_issue() if package_available else None
     platform_supported = sys.platform != "win32" or _running_in_wsl()
     wsl_distribution_installed = _windows_wsl_distribution_installed()
     llm_ready = settings.allow_live_llm and bool(settings.openai_api_key)
-    native_training_ready = package_available and platform_supported and llm_ready
+    native_training_ready = package_available and apo_dependency_issue is None and platform_supported and llm_ready
 
     if not package_available:
         reason = "Microsoft Agent Lightning package not installed; exporting sandbox bundle only."
+    elif apo_dependency_issue is not None:
+        reason = apo_dependency_issue
     elif sys.platform == "win32" and not _running_in_wsl() and wsl_distribution_installed is False:
         reason = (
             "Native Microsoft Agent Lightning training requires Linux or WSL2, but no WSL distro is installed. "
@@ -280,6 +297,12 @@ def _import_agentlightning() -> Any:
     return import_module("agentlightning")
 
 
+def _coerce_benchmark_task(task: BenchmarkTask | dict[str, Any]) -> BenchmarkTask:
+    if isinstance(task, BenchmarkTask):
+        return task
+    return BenchmarkTask.model_validate(task)
+
+
 def create_lightning_rollout_agent(
     settings: Settings | None = None,
     *,
@@ -290,25 +313,26 @@ def create_lightning_rollout_agent(
     reward_model = CompositeRewardModel()
 
     @agl.rollout
-    def priori_x_prompt_rollout(task: BenchmarkTask, prompt_template: Any) -> float:
+    def priori_x_prompt_rollout(task: BenchmarkTask | dict[str, Any], prompt_template: Any) -> float:
+        normalized_task = _coerce_benchmark_task(task)
         orchestrator = PRIORIXOrchestrator(settings=settings, policy_version=policy_version)
-        rendered_prompt = render_prompt_template(prompt_template, task.prompt)
+        rendered_prompt = render_prompt_template(prompt_template, normalized_task.prompt)
         if hasattr(agl, "emit_object"):
             agl.emit_object(
                 {
-                    "task_id": task.task_id,
-                    "source_dataset": task.source_dataset,
-                    "task_type": task.task_type,
+                    "task_id": normalized_task.task_id,
+                    "source_dataset": normalized_task.source_dataset,
+                    "task_type": normalized_task.task_type,
                     "policy_version": policy_version,
                 }
             )
         report = orchestrator.analyze_text_case(
-            task.task_id,
-            task.prompt,
+            normalized_task.task_id,
+            normalized_task.prompt,
             policy_version=policy_version,
             prompt_template=str(prompt_template),
         )
-        reward = reward_model.score(task, report)
+        reward = reward_model.score(normalized_task, report)
         if hasattr(agl, "emit_object"):
             agl.emit_object(
                 {
