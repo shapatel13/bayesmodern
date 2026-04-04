@@ -221,6 +221,17 @@ def test_render_prompt_template_formats_task_text() -> None:
     assert "Example vignette" in rendered
 
 
+def test_render_prompt_template_preserves_literal_braces_from_resource_templates() -> None:
+    class FakePromptResource:
+        template = "Choose one of {low, medium, high}.\nCase:\n{task}"
+
+        def format(self, **kwargs):
+            raise KeyError("low, medium, high")
+
+    rendered = render_prompt_template(FakePromptResource(), "Example vignette")
+    assert rendered == "Choose one of {low, medium, high}.\nCase:\nExample vignette"
+
+
 def test_resolve_lightning_training_config_uses_balanced_defaults_and_dummy_tracer() -> None:
     class FakeAGL:
         class DummyTracer:

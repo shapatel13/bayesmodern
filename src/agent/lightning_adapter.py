@@ -227,12 +227,16 @@ def export_benchmark_tasks_jsonl(tasks: list[BenchmarkTask], output_path: Path) 
 
 
 def render_prompt_template(prompt_template: Any, task_prompt: str) -> str:
-    if hasattr(prompt_template, "format"):
-        try:
-            return prompt_template.format(task=task_prompt)
-        except TypeError:
-            pass
-    template_text = str(prompt_template)
+    template_text = getattr(prompt_template, "template", None)
+    if not isinstance(template_text, str):
+        if isinstance(prompt_template, str):
+            template_text = prompt_template
+        elif hasattr(prompt_template, "format"):
+            try:
+                return prompt_template.format(task=task_prompt)
+            except (TypeError, KeyError, ValueError):
+                pass
+        template_text = str(prompt_template)
     return render_task_prompt(template_text, task_prompt)
 
 

@@ -118,7 +118,7 @@ def resolve_prompt_template(prompt_version: str | None = None) -> str:
 
 def render_task_prompt(prompt_template: str, task_prompt: str) -> str:
     if "{task}" in prompt_template:
-        return prompt_template.format(task=task_prompt)
+        return prompt_template.replace("{task}", task_prompt)
     return f"{prompt_template}\n\nCase:\n{task_prompt}".strip()
 
 

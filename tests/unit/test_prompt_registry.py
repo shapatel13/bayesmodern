@@ -33,3 +33,11 @@ def test_prompt_registry_bootstraps_and_promotes_candidate(tmp_path, monkeypatch
 def test_render_task_prompt_inserts_case_text() -> None:
     rendered = prompt_registry.render_task_prompt("Header\n{task}", "Clinical vignette")
     assert rendered == "Header\nClinical vignette"
+
+
+def test_render_task_prompt_preserves_other_literal_braces() -> None:
+    rendered = prompt_registry.render_task_prompt(
+        "Risk buckets {low, medium, high}\nCase:\n{task}",
+        "Clinical vignette",
+    )
+    assert rendered == "Risk buckets {low, medium, high}\nCase:\nClinical vignette"
